@@ -14,6 +14,107 @@ SYSTEMD_DIR="/etc/systemd/system"
 DNSTT_SOURCE_URL="${DNSTT_SOURCE_URL:-https://www.bamsoftware.com/software/dnstt/dnstt-20241021.zip}"
 DNSTT_SERVER_URL="${DNSTT_SERVER_URL:-}"
 DNSTT_CLIENT_URL="${DNSTT_CLIENT_URL:-}"
+CONFIG_HOSTNAME=""
+CONFIG_PUBLIC_IP=""
+
+trim() {
+  local value="${1:-}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+is_ipv4() {
+  local ip="$1"
+  local IFS=.
+  local -a octets=()
+  read -r -a octets <<<"$ip"
+  [[ "${#octets[@]}" -eq 4 ]] || return 1
+  for octet in "${octets[@]}"; do
+    [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+    (( octet >= 0 && octet <= 255 )) || return 1
+  done
+}
+
+prompt_required() {
+  local __var_name="$1"
+  local prompt_text="$2"
+  local default_value="${3:-}"
+  local reply=""
+
+  if [[ ! -t 0 && -z "$default_value" ]]; then
+    echo "$prompt_text is required in non-interactive mode" >&2
+    exit 1
+  fi
+
+  while true; do
+    if [[ -n "$default_value" ]]; then
+      read -r -p "$prompt_text [$default_value]: " reply
+      reply="${reply:-$default_value}"
+    else
+      read -r -p "$prompt_text: " reply
+    fi
+    reply="$(trim "$reply")"
+    if [[ -n "$reply" ]]; then
+      printf -v "$__var_name" '%s' "$reply"
+      return 0
+    fi
+    echo "A value is required." >&2
+  done
+}
+
+prompt_public_ip() {
+  local default_value="${1:-}"
+  local reply=""
+
+  if [[ ! -t 0 ]]; then
+    if [[ -n "$default_value" ]] && is_ipv4 "$default_value"; then
+      CONFIG_PUBLIC_IP="$default_value"
+      return 0
+    fi
+    echo "Public IPv4 is required in non-interactive mode. Pass SLOWDNS_PUBLIC_IP." >&2
+    exit 1
+  fi
+
+  while true; do
+    if [[ -n "$default_value" ]]; then
+      read -r -p "Public IPv4 for this VPS [$default_value]: " reply
+      reply="${reply:-$default_value}"
+    else
+      read -r -p "Public IPv4 for this VPS: " reply
+    fi
+    reply="$(trim "$reply")"
+    if is_ipv4 "$reply"; then
+      CONFIG_PUBLIC_IP="$reply"
+      return 0
+    fi
+    echo "Enter a valid IPv4 address." >&2
+  done
+}
+
+read_existing_config_value() {
+  local key="$1"
+  local path="$CONFIG_DIR/config.json"
+  if [[ ! -f "$path" ]]; then
+    return 0
+  fi
+  python3 - "$path" "$key" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+key = sys.argv[2]
+try:
+    cfg = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+value = cfg.get(key, "")
+if value is None:
+    value = ""
+print(str(value))
+PY
+}
 
 require_root() {
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -51,6 +152,43 @@ detect_hostname() {
   hostname -f 2>/dev/null || hostname 2>/dev/null || true
 }
 
+resolve_install_values() {
+  local detected_host existing_host host_default
+  local detected_ip existing_ip ip_default
+
+  mkdir -p "$CONFIG_DIR"
+
+  detected_host="$(trim "$(detect_hostname)")"
+  existing_host="$(trim "$(read_existing_config_value hostname)")"
+  detected_ip="$(trim "$(detect_public_ip)")"
+  existing_ip="$(trim "$(read_existing_config_value public_ip)")"
+
+  host_default="${SLOWDNS_HOSTNAME:-$existing_host}"
+  if [[ -z "$host_default" || "$host_default" == "localhost" ]]; then
+    if [[ -n "$detected_host" && "$detected_host" != "localhost" ]]; then
+      host_default="$detected_host"
+    else
+      host_default=""
+    fi
+  fi
+
+  if [[ -t 0 ]]; then
+    prompt_required CONFIG_HOSTNAME "Domain for this VPS" "$host_default"
+  else
+    if [[ -z "$host_default" ]]; then
+      echo "Domain is required in non-interactive mode. Pass SLOWDNS_HOSTNAME." >&2
+      exit 1
+    fi
+    CONFIG_HOSTNAME="$host_default"
+  fi
+
+  ip_default="${SLOWDNS_PUBLIC_IP:-$existing_ip}"
+  if [[ -z "$ip_default" ]]; then
+    ip_default="$detected_ip"
+  fi
+  prompt_public_ip "$ip_default"
+}
+
 copy_project() {
   mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$API_DIR" "$SCRIPTS_DIR" "$LOG_DIR"
   install -m 0755 "$PROJECT_DIR/api/slowdns_only_api.py" "$API_DIR/slowdns_only_api.py"
@@ -61,12 +199,15 @@ copy_project() {
   install -m 0755 "$PROJECT_DIR/scripts/menu.sh" "$SCRIPTS_DIR/menu.sh"
   ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/slowdns-menu
   ln -sf "$SCRIPTS_DIR/control.sh" /usr/local/bin/slowdns-service
+  if ! command -v menu >/dev/null 2>&1; then
+    ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/menu
+  fi
 }
 
 render_config() {
   local hostname public_ip listen_port api_bind api_port mtu zone_prefix ns_prefix local_port
-  hostname="$(detect_hostname)"
-  public_ip="$(detect_public_ip)"
+  hostname="$CONFIG_HOSTNAME"
+  public_ip="$CONFIG_PUBLIC_IP"
   listen_port="${SLOWDNS_LISTEN_PORT:-53}"
   api_bind="${SLOWDNS_API_BIND:-127.0.0.1}"
   api_port="${SLOWDNS_API_PORT:-8091}"
@@ -75,8 +216,7 @@ render_config() {
   ns_prefix="${SLOWDNS_NS_PREFIX:-}"
   local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-8000}"
 
-  if [[ ! -f "$CONFIG_DIR/config.json" ]]; then
-    cat >"$CONFIG_DIR/config.json" <<JSON
+  cat >"$CONFIG_DIR/config.json" <<JSON
 {
   "bind": "$api_bind",
   "port": $api_port,
@@ -118,7 +258,6 @@ render_config() {
   }
 }
 JSON
-  fi
 }
 
 build_dnstt() {
@@ -225,15 +364,27 @@ start_services() {
   systemctl enable --now slowdns-only-expire-sync.timer
 }
 
+ensure_service_active() {
+  local service="$1"
+  if ! systemctl is-active --quiet "$service"; then
+    echo "service failed to start: $service" >&2
+    systemctl status "$service" --no-pager >&2 || true
+    exit 1
+  fi
+}
+
 main() {
   require_root
   install_packages
+  resolve_install_values
   copy_project
   render_config
   build_dnstt
   generate_keys
   write_units
   start_services
+  ensure_service_active slowdns-only-api.service
+  ensure_service_active slowdns-only-dnstt.service
   echo "slowdns-only installed under $INSTALL_DIR"
   echo "api: systemctl status slowdns-only-api"
   echo "dnstt: systemctl status slowdns-only-dnstt"

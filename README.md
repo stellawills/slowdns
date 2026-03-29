@@ -6,11 +6,11 @@ Install target on Linux:
 
 ```text
 /opt/slowdns-only/
-├── api/
-├── bin/
-├── config/
-├── logs/
-└── scripts/
+|-- api/
+|-- bin/
+|-- config/
+|-- logs/
+`-- scripts/
 ```
 
 What it provides:
@@ -18,6 +18,7 @@ What it provides:
 - `dnstt`-based SlowDNS server that forwards tunnel traffic to `127.0.0.1:22`
 - standalone SSH account API with legacy and v2-compatible routes
 - terminal menu via `slowdns-menu`
+- optional `menu` command on standalone boxes where `menu` is not already installed
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
 
@@ -51,6 +52,8 @@ Notes:
 
 - Installation is token-free.
 - API access is also token-free by design.
+- Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
+- Installer now fails fast if the API or dnstt service does not come up cleanly.
 - Default API bind is `127.0.0.1`; change it in config if you intentionally want remote access.
 - Default dnstt source is the pinned official upstream snapshot, not a third-party mirror.
 
@@ -81,6 +84,7 @@ Service control after install:
 /opt/slowdns-only/scripts/control.sh restart
 /opt/slowdns-only/scripts/control.sh status
 slowdns-menu
+menu
 ```
 
 Official dnstt reference:
