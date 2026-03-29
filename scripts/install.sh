@@ -213,7 +213,7 @@ normalize_go_version() {
   major="${major:-0}"
   minor="${minor:-0}"
   patch="${patch:-0}"
-  printf '%03d%03d%03d' "$major" "$minor" "$patch"
+  printf '%d' "$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))"
 }
 
 go_version_from_binary() {
@@ -225,11 +225,13 @@ go_version_from_binary() {
 
 go_version_ok() {
   local binary="$1"
-  local current required
+  local current required current_num required_num
   current="$(go_version_from_binary "$binary")"
   [[ -n "$current" ]] || return 1
-  required="$(normalize_go_version "$GO_MIN_VERSION")"
-  [[ "$(normalize_go_version "$current")" -ge "$required" ]]
+  required="$GO_MIN_VERSION"
+  current_num="$(normalize_go_version "$current")"
+  required_num="$(normalize_go_version "$required")"
+  (( current_num >= required_num ))
 }
 
 detect_go_archive_name() {
