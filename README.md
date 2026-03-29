@@ -60,6 +60,12 @@ Notes:
 Installation on Linux:
 
 ```bash
+bash <(curl -4fsSL https://raw.githubusercontent.com/stellawills/slowdns/main/install.sh)
+```
+
+Clone-based install also works:
+
+```bash
 cd /root
 git clone https://github.com/stellawills/slowdns.git slowdns-src
 bash slowdns-src/install.sh
@@ -68,6 +74,7 @@ bash slowdns-src/install.sh
 Operator entrypoint:
 
 - `install.sh` at the repo root is the only public installer entrypoint.
+- The root installer works both as a cloned file and as a raw `curl | bash` bootstrap.
 - `scripts/` contains internal implementation details that back the root installer.
 
 Useful environment overrides:
