@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG_PATH="${SLOWDNS_ONLY_CONFIG:-/opt/slowdns-only/config/config.json}"
+CONFIG_PATH="${SLOWDNS_CONFIG:-${SLOWDNS_ONLY_CONFIG:-/opt/slowdns/config/config.json}}"
+SLOWDNS_HOME="${SLOWDNS_HOME:-/opt/slowdns}"
 API_HOST="${SLOWDNS_ONLY_API_HOST:-127.0.0.1}"
 API_SCHEME="${SLOWDNS_ONLY_API_SCHEME:-http}"
 API_PORT=""
@@ -406,7 +407,7 @@ api_health_ok() {
 print_header() {
   clear 2>/dev/null || true
   echo
-  printf '  %sSlowDNS Only Menu%s\n' "$C_BOLD" "$C_RESET"
+  printf '  %sSlowDNS Menu%s\n' "$C_BOLD" "$C_RESET"
   printf '  %sVersion%s  %s\n' "$C_MUTED" "$C_RESET" "$MENU_VERSION"
   hr
   printf '  %-12s %s%s%s\n' "Domain" "$C_WHITE" "${DOMAIN:-unknown}" "$C_RESET"
@@ -517,7 +518,7 @@ lock_or_unlock() {
 show_status() {
   section "Service Status"
   echo
-  /opt/slowdns-only/scripts/control.sh status || true
+  "$SLOWDNS_HOME/scripts/control.sh" status || true
 }
 
 show_runtime_info() {
@@ -529,15 +530,15 @@ show_runtime_info() {
 restart_services() {
   section "Restart Services"
   echo
-  /opt/slowdns-only/scripts/control.sh restart || true
+  "$SLOWDNS_HOME/scripts/control.sh" restart || true
   echo
-  /opt/slowdns-only/scripts/control.sh status || true
+  "$SLOWDNS_HOME/scripts/control.sh" status || true
 }
 
 view_logs() {
   section "Recent Logs"
   echo
-  /opt/slowdns-only/scripts/control.sh logs || true
+  "$SLOWDNS_HOME/scripts/control.sh" logs || true
 }
 
 main_menu() {

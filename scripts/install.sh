@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-INSTALL_DIR="/opt/slowdns-only"
+INSTALL_DIR="/opt/slowdns"
+LEGACY_INSTALL_DIR="/opt/slowdns-only"
 CONFIG_DIR="$INSTALL_DIR/config"
 BIN_DIR="$INSTALL_DIR/bin"
 API_DIR="$INSTALL_DIR/api"
@@ -102,6 +103,9 @@ prompt_public_ip() {
 read_existing_config_value() {
   local key="$1"
   local path="$CONFIG_DIR/config.json"
+  if [[ ! -f "$path" && -f "$LEGACY_INSTALL_DIR/config/config.json" ]]; then
+    path="$LEGACY_INSTALL_DIR/config/config.json"
+  fi
   if [[ ! -f "$path" ]]; then
     return 0
   fi
@@ -255,6 +259,25 @@ copy_project() {
   if ! command -v menu >/dev/null 2>&1; then
     ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/menu
   fi
+  if [[ ! -e "$LEGACY_INSTALL_DIR" ]]; then
+    ln -s "$INSTALL_DIR" "$LEGACY_INSTALL_DIR"
+  fi
+}
+
+migrate_legacy_state() {
+  local legacy_config_dir="$LEGACY_INSTALL_DIR/config"
+  [[ -d "$legacy_config_dir" ]] || return 0
+
+  if [[ ! -f "$CONFIG_DIR/slowdns.db" ]]; then
+    if [[ -f "$legacy_config_dir/slowdns.db" ]]; then
+      cp -f "$legacy_config_dir/slowdns.db" "$CONFIG_DIR/slowdns.db"
+    elif [[ -f "$legacy_config_dir/slowdns-only.db" ]]; then
+      cp -f "$legacy_config_dir/slowdns-only.db" "$CONFIG_DIR/slowdns.db"
+    fi
+  fi
+
+  [[ -f "$CONFIG_DIR/server.key" ]] || [[ ! -f "$legacy_config_dir/server.key" ]] || cp -f "$legacy_config_dir/server.key" "$CONFIG_DIR/server.key"
+  [[ -f "$CONFIG_DIR/server.pub" ]] || [[ ! -f "$legacy_config_dir/server.pub" ]] || cp -f "$legacy_config_dir/server.pub" "$CONFIG_DIR/server.pub"
 }
 
 normalize_go_version() {
@@ -379,7 +402,7 @@ render_config() {
 {
   "bind": "$api_bind",
   "port": $api_port,
-  "db_path": "$CONFIG_DIR/slowdns-only.db",
+  "db_path": "$CONFIG_DIR/slowdns.db",
   "hostname": "$hostname",
   "public_ip": "$public_ip",
   "city": "",
@@ -405,7 +428,7 @@ render_config() {
   },
   "slowdns": {
     "enabled": true,
-    "service": "slowdns-only-dnstt",
+    "service": "slowdns-dnstt",
     "listen_port": $listen_port,
     "public_port": $public_port,
     "redirect_53": $redirect_53,
@@ -461,15 +484,15 @@ generate_keys() {
 }
 
 write_units() {
-  cat >"$SYSTEMD_DIR/slowdns-only-api.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-api.service" <<UNIT
 [Unit]
-Description=SlowDNS Only API
+Description=SlowDNS API
 After=network-online.target ssh.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/slowdns-only/scripts/run-api.sh
+ExecStart=/opt/slowdns/scripts/run-api.sh
 Restart=always
 RestartSec=2
 
@@ -477,15 +500,15 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-dnstt.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-dnstt.service" <<UNIT
 [Unit]
-Description=SlowDNS Only dnstt Server
+Description=SlowDNS dnstt Server
 After=network-online.target ssh.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/slowdns-only/scripts/run-dnstt.sh
+ExecStart=/opt/slowdns/scripts/run-dnstt.sh
 Restart=always
 RestartSec=2
 
@@ -493,52 +516,67 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-udp53-redirect.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-udp53-redirect.service" <<UNIT
 [Unit]
-Description=SlowDNS Only UDP 53 redirect
+Description=SlowDNS UDP 53 redirect
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/opt/slowdns-only/scripts/udp53-redirect.sh start
-ExecStop=/opt/slowdns-only/scripts/udp53-redirect.sh stop
+ExecStart=/opt/slowdns/scripts/udp53-redirect.sh start
+ExecStop=/opt/slowdns/scripts/udp53-redirect.sh stop
 
 [Install]
 WantedBy=multi-user.target
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-expire-sync.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-expire-sync.service" <<UNIT
 [Unit]
-Description=SlowDNS Only expiry synchronizer
-After=slowdns-only-api.service
+Description=SlowDNS expiry synchronizer
+After=slowdns-api.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/slowdns-only/scripts/expire-sync.sh
+ExecStart=/opt/slowdns/scripts/expire-sync.sh
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-expire-sync.timer" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-expire-sync.timer" <<UNIT
 [Unit]
-Description=Run SlowDNS Only expiry sync every 15 minutes
+Description=Run SlowDNS expiry sync every 15 minutes
 
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=15min
-Unit=slowdns-only-expire-sync.service
+Unit=slowdns-expire-sync.service
 
 [Install]
 WantedBy=timers.target
 UNIT
 }
 
+cleanup_legacy_units() {
+  local units=(
+    "slowdns-only-api.service"
+    "slowdns-only-dnstt.service"
+    "slowdns-only-udp53-redirect.service"
+    "slowdns-only-expire-sync.service"
+    "slowdns-only-expire-sync.timer"
+  )
+  local unit
+  for unit in "${units[@]}"; do
+    systemctl disable --now "$unit" >/dev/null 2>&1 || true
+    rm -f "$SYSTEMD_DIR/$unit"
+  done
+}
+
 start_services() {
   systemctl daemon-reload
-  systemctl enable --now slowdns-only-udp53-redirect.service
-  systemctl enable --now slowdns-only-api.service
-  systemctl enable --now slowdns-only-dnstt.service
-  systemctl enable --now slowdns-only-expire-sync.timer
+  systemctl enable --now slowdns-udp53-redirect.service
+  systemctl enable --now slowdns-api.service
+  systemctl enable --now slowdns-dnstt.service
+  systemctl enable --now slowdns-expire-sync.timer
 }
 
 ensure_service_active() {
@@ -556,16 +594,18 @@ main() {
   resolve_install_values
   copy_project
   render_config
+  migrate_legacy_state
   build_dnstt
   generate_keys
   write_units
+  cleanup_legacy_units
   start_services
-  ensure_service_active slowdns-only-udp53-redirect.service
-  ensure_service_active slowdns-only-api.service
-  ensure_service_active slowdns-only-dnstt.service
-  echo "slowdns-only installed under $INSTALL_DIR"
-  echo "api: systemctl status slowdns-only-api"
-  echo "dnstt: systemctl status slowdns-only-dnstt"
+  ensure_service_active slowdns-udp53-redirect.service
+  ensure_service_active slowdns-api.service
+  ensure_service_active slowdns-dnstt.service
+  echo "slowdns installed under $INSTALL_DIR"
+  echo "api: systemctl status slowdns-api"
+  echo "dnstt: systemctl status slowdns-dnstt"
   echo "menu: slowdns-menu"
 }
 

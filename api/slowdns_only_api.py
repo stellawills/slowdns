@@ -25,7 +25,7 @@ MAX_BODY_BYTES = 1_048_576
 DEFAULT_CONFIG: Dict[str, Any] = {
     "bind": "127.0.0.1",
     "port": 8091,
-    "db_path": "/opt/slowdns-only/config/slowdns-only.db",
+    "db_path": "/opt/slowdns/config/slowdns.db",
     "hostname": "",
     "public_ip": "",
     "city": "",
@@ -51,7 +51,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "slowdns": {
         "enabled": True,
-        "service": "slowdns-only-dnstt",
+        "service": "slowdns-dnstt",
         "listen_port": 5300,
         "public_port": 53,
         "redirect_53": True,
@@ -62,8 +62,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "zone_prefix": "",
         "ns_prefix": "",
         "mtu": 512,
-        "public_key_path": "/opt/slowdns-only/config/server.pub",
-        "private_key_path": "/opt/slowdns-only/config/server.key",
+        "public_key_path": "/opt/slowdns/config/server.pub",
+        "private_key_path": "/opt/slowdns/config/server.key",
     },
 }
 
@@ -191,7 +191,7 @@ class SlowDnsOnlyState:
         self.config_path = config_path
         self.dry_run = dry_run
         self.config = load_config(config_path)
-        self.db_path = pathlib.Path(str(self.config.get("db_path") or "/opt/slowdns-only/config/slowdns-only.db"))
+        self.db_path = pathlib.Path(str(self.config.get("db_path") or "/opt/slowdns/config/slowdns.db"))
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -654,10 +654,10 @@ class SlowDnsOnlyState:
 
     def service_summary(self) -> List[Dict[str, Any]]:
         services = [
-            "slowdns-only-api",
-            "slowdns-only-dnstt",
-            "slowdns-only-udp53-redirect",
-            "slowdns-only-expire-sync.timer",
+            "slowdns-api",
+            "slowdns-dnstt",
+            "slowdns-udp53-redirect",
+            "slowdns-expire-sync.timer",
         ]
         summary: List[Dict[str, Any]] = []
         for service in services:
@@ -965,7 +965,7 @@ def serve(config_path: pathlib.Path, dry_run: bool) -> None:
     bind = str(state.config.get("bind") or "127.0.0.1")
     port = int(state.config.get("port") or 8091)
     server = SlowDnsOnlyServer((bind, port), SlowDnsOnlyHandler, state)
-    print(f"slowdns-only api listening on {bind}:{port}", flush=True)
+    print(f"slowdns api listening on {bind}:{port}", flush=True)
     server.serve_forever()
 
 
@@ -975,8 +975,8 @@ def run_expire_sync(config_path: pathlib.Path, dry_run: bool) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Standalone SlowDNS-only API")
-    parser.add_argument("--config", default="/opt/slowdns-only/config/config.json")
+    parser = argparse.ArgumentParser(description="Standalone SlowDNS API")
+    parser.add_argument("--config", default="/opt/slowdns/config/config.json")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--expire-sync", action="store_true")
     args = parser.parse_args()

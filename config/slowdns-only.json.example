@@ -1,7 +1,7 @@
 {
   "bind": "127.0.0.1",
   "port": 8091,
-  "db_path": "/opt/slowdns-only/config/slowdns-only.db",
+  "db_path": "/opt/slowdns/config/slowdns.db",
   "hostname": "dns.example.com",
   "public_ip": "203.0.113.10",
   "city": "",
@@ -27,7 +27,7 @@
   },
   "slowdns": {
     "enabled": true,
-    "service": "slowdns-only-dnstt",
+    "service": "slowdns-dnstt",
     "listen_port": 5300,
     "public_port": 53,
     "redirect_53": true,
@@ -38,7 +38,7 @@
     "zone_prefix": "",
     "ns_prefix": "",
     "mtu": 512,
-    "public_key_path": "/opt/slowdns-only/config/server.pub",
-    "private_key_path": "/opt/slowdns-only/config/server.key"
+    "public_key_path": "/opt/slowdns/config/server.pub",
+    "private_key_path": "/opt/slowdns/config/server.key"
   }
 }

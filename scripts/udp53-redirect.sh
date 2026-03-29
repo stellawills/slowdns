@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ACTION="${1:-start}"
-CONFIG_PATH="${SLOWDNS_ONLY_CONFIG:-/opt/slowdns-only/config/config.json}"
+CONFIG_PATH="${SLOWDNS_CONFIG:-${SLOWDNS_ONLY_CONFIG:-/opt/slowdns/config/config.json}}"
 
 need_iptables() {
   command -v iptables >/dev/null 2>&1 || { echo "iptables is required for UDP 53 redirect" >&2; exit 1; }

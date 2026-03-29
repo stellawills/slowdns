@@ -1,11 +1,11 @@
-# SlowDNS Only
+# SlowDNS
 
 Standalone SlowDNS (SSH over DNS) service that stays API-compatible with the existing IPTunnel SSH account flow, but does not use token-based installation or token-gated API access.
 
 Install target on Linux:
 
 ```text
-/opt/slowdns-only/
+/opt/slowdns/
 |-- api/
 |-- bin/
 |-- config/
@@ -55,7 +55,7 @@ Notes:
 - Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
 - Installer prompts for the public hostname and delegated SlowDNS tunnel domain, then automatically uses the public hostname as the NS target host.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
-- Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns-only/toolchain/` when the VPS has an outdated system Go.
+- Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns/toolchain/` when the VPS has an outdated system Go.
 - When the daemon must bind an internal high port like `5300`, the installer can still expose standard UDP `53` externally via an automatic redirect service.
 - Default API bind is `127.0.0.1`; change it in config if you intentionally want remote access.
 - Default dnstt source is the pinned official upstream snapshot, not a third-party mirror.
@@ -101,9 +101,9 @@ Advanced override:
 Service control after install:
 
 ```bash
-/opt/slowdns-only/scripts/control.sh start
-/opt/slowdns-only/scripts/control.sh restart
-/opt/slowdns-only/scripts/control.sh status
+/opt/slowdns/scripts/control.sh start
+/opt/slowdns/scripts/control.sh restart
+/opt/slowdns/scripts/control.sh status
 slowdns-menu
 menu
 ```
