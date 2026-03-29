@@ -17,6 +17,7 @@ What it provides:
 
 - `dnstt`-based SlowDNS server that forwards tunnel traffic to `127.0.0.1:22`
 - standalone SSH account API with legacy and v2-compatible routes
+- terminal menu via `slowdns-menu`
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
 
@@ -79,6 +80,7 @@ Service control after install:
 /opt/slowdns-only/scripts/control.sh start
 /opt/slowdns-only/scripts/control.sh restart
 /opt/slowdns-only/scripts/control.sh status
+slowdns-menu
 ```
 
 Official dnstt reference:

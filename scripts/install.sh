@@ -58,6 +58,9 @@ copy_project() {
   install -m 0755 "$PROJECT_DIR/scripts/run-dnstt.sh" "$SCRIPTS_DIR/run-dnstt.sh"
   install -m 0755 "$PROJECT_DIR/scripts/control.sh" "$SCRIPTS_DIR/control.sh"
   install -m 0755 "$PROJECT_DIR/scripts/expire-sync.sh" "$SCRIPTS_DIR/expire-sync.sh"
+  install -m 0755 "$PROJECT_DIR/scripts/menu.sh" "$SCRIPTS_DIR/menu.sh"
+  ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/slowdns-menu
+  ln -sf "$SCRIPTS_DIR/control.sh" /usr/local/bin/slowdns-service
 }
 
 render_config() {
@@ -234,6 +237,7 @@ main() {
   echo "slowdns-only installed under $INSTALL_DIR"
   echo "api: systemctl status slowdns-only-api"
   echo "dnstt: systemctl status slowdns-only-dnstt"
+  echo "menu: slowdns-menu"
 }
 
 main "$@"
