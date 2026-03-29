@@ -314,7 +314,7 @@ ensure_go() {
 
 render_config() {
   local hostname public_ip listen_port public_port redirect_53 api_bind api_port mtu zone_prefix ns_prefix local_port ns_host tunnel_domain
-  local existing_listen_port existing_public_port existing_redirect existing_api_bind existing_api_port existing_mtu existing_zone_prefix existing_ns_prefix existing_local_port
+  local existing_listen_port existing_public_port existing_redirect existing_api_bind existing_api_port existing_mtu existing_local_port
   hostname="$CONFIG_HOSTNAME"
   tunnel_domain="$CONFIG_HOSTNAME"
   ns_host="$CONFIG_NS_HOST"
@@ -325,8 +325,6 @@ render_config() {
   existing_api_bind="$(trim "$(read_existing_config_value bind)")"
   existing_api_port="$(trim "$(read_existing_config_value port)")"
   existing_mtu="$(trim "$(read_existing_config_value slowdns.mtu)")"
-  existing_zone_prefix="$(trim "$(read_existing_config_value slowdns.zone_prefix)")"
-  existing_ns_prefix="$(trim "$(read_existing_config_value slowdns.ns_prefix)")"
   existing_local_port="$(trim "$(read_existing_config_value slowdns.local_port)")"
   listen_port="${SLOWDNS_LISTEN_PORT:-${existing_listen_port:-5300}}"
   public_port="${SLOWDNS_PUBLIC_PORT:-$existing_public_port}"
@@ -348,8 +346,8 @@ render_config() {
   api_bind="${SLOWDNS_API_BIND:-${existing_api_bind:-127.0.0.1}}"
   api_port="${SLOWDNS_API_PORT:-${existing_api_port:-8091}}"
   mtu="${SLOWDNS_MTU:-${existing_mtu:-512}}"
-  zone_prefix="${SLOWDNS_ZONE_PREFIX:-$existing_zone_prefix}"
-  ns_prefix="${SLOWDNS_NS_PREFIX:-$existing_ns_prefix}"
+  zone_prefix="${SLOWDNS_ZONE_PREFIX:-}"
+  ns_prefix="${SLOWDNS_NS_PREFIX:-}"
   local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-${existing_local_port:-8000}}"
 
   cat >"$CONFIG_DIR/config.json" <<JSON
