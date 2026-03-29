@@ -54,6 +54,7 @@ Notes:
 - API access is also token-free by design.
 - Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
+- Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns-only/toolchain/` when the VPS has an outdated system Go.
 - Default API bind is `127.0.0.1`; change it in config if you intentionally want remote access.
 - Default dnstt source is the pinned official upstream snapshot, not a third-party mirror.
 

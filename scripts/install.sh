@@ -9,13 +9,18 @@ BIN_DIR="$INSTALL_DIR/bin"
 API_DIR="$INSTALL_DIR/api"
 SCRIPTS_DIR="$INSTALL_DIR/scripts"
 LOG_DIR="$INSTALL_DIR/logs"
+TOOLCHAIN_DIR="$INSTALL_DIR/toolchain"
 SYSTEMD_DIR="/etc/systemd/system"
 
 DNSTT_SOURCE_URL="${DNSTT_SOURCE_URL:-https://www.bamsoftware.com/software/dnstt/dnstt-20241021.zip}"
 DNSTT_SERVER_URL="${DNSTT_SERVER_URL:-}"
 DNSTT_CLIENT_URL="${DNSTT_CLIENT_URL:-}"
+GO_MIN_VERSION="${GO_MIN_VERSION:-1.21.0}"
+GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-1.22.12}"
+GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
 CONFIG_HOSTNAME=""
 CONFIG_PUBLIC_IP=""
+GO_CMD=""
 
 trim() {
   local value="${1:-}"
@@ -127,10 +132,7 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y python3 curl unzip openssh-server ca-certificates
-    if ! command -v go >/dev/null 2>&1; then
-      apt-get install -y golang-go
-    fi
+    apt-get install -y python3 curl unzip tar openssh-server ca-certificates
   fi
 }
 
@@ -190,7 +192,7 @@ resolve_install_values() {
 }
 
 copy_project() {
-  mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$API_DIR" "$SCRIPTS_DIR" "$LOG_DIR"
+  mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$API_DIR" "$SCRIPTS_DIR" "$LOG_DIR" "$TOOLCHAIN_DIR"
   install -m 0755 "$PROJECT_DIR/api/slowdns_only_api.py" "$API_DIR/slowdns_only_api.py"
   install -m 0755 "$PROJECT_DIR/scripts/run-api.sh" "$SCRIPTS_DIR/run-api.sh"
   install -m 0755 "$PROJECT_DIR/scripts/run-dnstt.sh" "$SCRIPTS_DIR/run-dnstt.sh"
@@ -201,6 +203,84 @@ copy_project() {
   ln -sf "$SCRIPTS_DIR/control.sh" /usr/local/bin/slowdns-service
   if ! command -v menu >/dev/null 2>&1; then
     ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/menu
+  fi
+}
+
+normalize_go_version() {
+  local value="$1"
+  local major minor patch
+  IFS=. read -r major minor patch <<<"$value"
+  major="${major:-0}"
+  minor="${minor:-0}"
+  patch="${patch:-0}"
+  printf '%03d%03d%03d' "$major" "$minor" "$patch"
+}
+
+go_version_from_binary() {
+  local binary="$1"
+  local version=""
+  version="$("$binary" version 2>/dev/null | sed -n 's/^go version go\([0-9][0-9.]*\).*/\1/p' | head -n1)"
+  printf '%s' "$version"
+}
+
+go_version_ok() {
+  local binary="$1"
+  local current required
+  current="$(go_version_from_binary "$binary")"
+  [[ -n "$current" ]] || return 1
+  required="$(normalize_go_version "$GO_MIN_VERSION")"
+  [[ "$(normalize_go_version "$current")" -ge "$required" ]]
+}
+
+detect_go_archive_name() {
+  local arch=""
+  case "$(uname -m)" in
+    x86_64|amd64)
+      arch="amd64"
+      ;;
+    aarch64|arm64)
+      arch="arm64"
+      ;;
+    *)
+      echo "unsupported architecture for Go bootstrap: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  printf 'go%s.linux-%s.tar.gz' "$GO_BOOTSTRAP_VERSION" "$arch"
+}
+
+bootstrap_go_toolchain() {
+  local archive_name archive_url tmpdir archive_path
+  archive_name="$(detect_go_archive_name)"
+  archive_url="${GO_BOOTSTRAP_BASE_URL}/${archive_name}"
+  tmpdir="$(mktemp -d)"
+  archive_path="$tmpdir/$archive_name"
+  curl -fsSL "$archive_url" -o "$archive_path"
+  rm -rf "$TOOLCHAIN_DIR/go"
+  mkdir -p "$TOOLCHAIN_DIR"
+  tar -xzf "$archive_path" -C "$TOOLCHAIN_DIR"
+  GO_CMD="$TOOLCHAIN_DIR/go/bin/go"
+  rm -rf "$tmpdir"
+}
+
+ensure_go() {
+  local local_go system_go
+  local_go="$TOOLCHAIN_DIR/go/bin/go"
+  if [[ -x "$local_go" ]] && go_version_ok "$local_go"; then
+    GO_CMD="$local_go"
+    return 0
+  fi
+
+  system_go="$(command -v go 2>/dev/null || true)"
+  if [[ -n "$system_go" ]] && go_version_ok "$system_go"; then
+    GO_CMD="$system_go"
+    return 0
+  fi
+
+  bootstrap_go_toolchain
+  if ! go_version_ok "$GO_CMD"; then
+    echo "failed to prepare a Go toolchain >= $GO_MIN_VERSION" >&2
+    exit 1
   fi
 }
 
@@ -272,10 +352,7 @@ build_dnstt() {
     return
   fi
 
-  if ! command -v go >/dev/null 2>&1; then
-    echo "go is required to build dnstt" >&2
-    exit 1
-  fi
+  ensure_go
 
   local tmpdir srcdir
   tmpdir="$(mktemp -d)"
@@ -287,8 +364,8 @@ build_dnstt() {
     echo "failed to unpack dnstt source" >&2
     exit 1
   fi
-  (cd "$srcdir/dnstt-server" && go build -o "$BIN_DIR/dnstt-server")
-  (cd "$srcdir/dnstt-client" && go build -o "$BIN_DIR/dnstt-client")
+  (cd "$srcdir/dnstt-server" && "$GO_CMD" build -o "$BIN_DIR/dnstt-server")
+  (cd "$srcdir/dnstt-client" && "$GO_CMD" build -o "$BIN_DIR/dnstt-client")
   chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
 }
 
