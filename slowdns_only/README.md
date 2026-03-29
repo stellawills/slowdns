@@ -58,7 +58,7 @@ Installation on Linux:
 ```bash
 cd /root
 git clone <your-repo> slowdns-src
-bash slowdns-src/slowdns_only/scripts/install.sh
+bash slowdns-src/scripts/install.sh
 ```
 
 Useful environment overrides:
@@ -70,7 +70,7 @@ SLOWDNS_LISTEN_PORT=53 \
 SLOWDNS_API_BIND=127.0.0.1 \
 SLOWDNS_API_PORT=8091 \
 SLOWDNS_MTU=512 \
-bash slowdns_only/scripts/install.sh
+bash scripts/install.sh
 ```
 
 Service control after install:
