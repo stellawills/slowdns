@@ -53,7 +53,7 @@ Notes:
 - Installation is token-free.
 - API access is also token-free by design.
 - Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
-- Installer prompts for the public hostname, delegated SlowDNS tunnel domain, and NS target host so you can control the DNS record shape.
+- Installer prompts for the public hostname and delegated SlowDNS tunnel domain, then automatically uses the public hostname as the NS target host.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
 - Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns-only/toolchain/` when the VPS has an outdated system Go.
 - When the daemon must bind an internal high port like `5300`, the installer can still expose standard UDP `53` externally via an automatic redirect service.
@@ -85,7 +85,6 @@ Useful environment overrides:
 ```bash
 SLOWDNS_HOSTNAME=dns.example.com \
 SLOWDNS_TUNNEL_DOMAIN=slowdns.example.com \
-SLOWDNS_NS_HOST=dns.example.com \
 SLOWDNS_PUBLIC_IP=203.0.113.10 \
 SLOWDNS_LISTEN_PORT=5300 \
 SLOWDNS_PUBLIC_PORT=53 \
@@ -94,6 +93,10 @@ SLOWDNS_API_PORT=8091 \
 SLOWDNS_MTU=512 \
 bash install.sh
 ```
+
+Advanced override:
+
+- `SLOWDNS_NS_HOST` is still supported if you intentionally want the NS target host to differ from the public hostname.
 
 Service control after install:
 

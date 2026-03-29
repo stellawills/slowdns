@@ -187,7 +187,7 @@ derive_sibling_host() {
 
 resolve_install_values() {
   local detected_host existing_host existing_tunnel_domain host_default tunnel_default
-  local existing_ns_host ns_default
+  local ns_default
   local detected_ip existing_ip ip_default
 
   mkdir -p "$CONFIG_DIR"
@@ -195,14 +195,10 @@ resolve_install_values() {
   detected_host="$(trim "$(detect_hostname)")"
   existing_host="$(trim "$(read_existing_config_value hostname)")"
   existing_tunnel_domain="$(trim "$(read_existing_config_value slowdns.tunnel_domain)")"
-  existing_ns_host="$(trim "$(read_existing_config_value slowdns.ns_host)")"
   detected_ip="$(trim "$(detect_public_ip)")"
   existing_ip="$(trim "$(read_existing_config_value public_ip)")"
 
   host_default="${SLOWDNS_HOSTNAME:-$existing_host}"
-  if [[ -z "$host_default" ]]; then
-    host_default="$existing_ns_host"
-  fi
   if [[ -z "$host_default" || "$host_default" == "localhost" ]]; then
     if [[ -n "$detected_host" && "$detected_host" != "localhost" ]]; then
       host_default="$detected_host"
@@ -231,14 +227,11 @@ resolve_install_values() {
     CONFIG_TUNNEL_DOMAIN="$tunnel_default"
   fi
 
-  ns_default="${SLOWDNS_NS_HOST:-$existing_ns_host}"
-  if [[ -z "$ns_default" ]]; then
-    ns_default="$CONFIG_HOSTNAME"
-  fi
-  if [[ -t 0 ]]; then
-    prompt_required CONFIG_NS_HOST "SlowDNS NS target host" "$ns_default"
-  else
+  ns_default="${SLOWDNS_NS_HOST:-}"
+  if [[ -n "$ns_default" ]]; then
     CONFIG_NS_HOST="$ns_default"
+  else
+    CONFIG_NS_HOST="$CONFIG_HOSTNAME"
   fi
 
   ip_default="${SLOWDNS_PUBLIC_IP:-$existing_ip}"
