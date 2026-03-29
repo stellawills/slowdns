@@ -20,6 +20,7 @@ GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-1.22.12}"
 GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
 CONFIG_HOSTNAME=""
 CONFIG_PUBLIC_IP=""
+CONFIG_NS_HOST=""
 GO_CMD=""
 
 trim() {
@@ -114,7 +115,12 @@ try:
     cfg = json.loads(path.read_text(encoding="utf-8"))
 except Exception:
     raise SystemExit(0)
-value = cfg.get(key, "")
+value = cfg
+for part in key.split("."):
+    if not isinstance(value, dict):
+        value = ""
+        break
+    value = value.get(part, "")
 if value is None:
     value = ""
 print(str(value))
@@ -155,17 +161,23 @@ detect_hostname() {
 }
 
 resolve_install_values() {
-  local detected_host existing_host host_default
+  local detected_host existing_host existing_tunnel_domain host_default
+  local existing_ns_host ns_default
   local detected_ip existing_ip ip_default
 
   mkdir -p "$CONFIG_DIR"
 
   detected_host="$(trim "$(detect_hostname)")"
   existing_host="$(trim "$(read_existing_config_value hostname)")"
+  existing_tunnel_domain="$(trim "$(read_existing_config_value slowdns.tunnel_domain)")"
+  existing_ns_host="$(trim "$(read_existing_config_value slowdns.ns_host)")"
   detected_ip="$(trim "$(detect_public_ip)")"
   existing_ip="$(trim "$(read_existing_config_value public_ip)")"
 
-  host_default="${SLOWDNS_HOSTNAME:-$existing_host}"
+  host_default="${SLOWDNS_TUNNEL_DOMAIN:-${SLOWDNS_HOSTNAME:-$existing_tunnel_domain}}"
+  if [[ -z "$host_default" ]]; then
+    host_default="$existing_host"
+  fi
   if [[ -z "$host_default" || "$host_default" == "localhost" ]]; then
     if [[ -n "$detected_host" && "$detected_host" != "localhost" ]]; then
       host_default="$detected_host"
@@ -175,13 +187,23 @@ resolve_install_values() {
   fi
 
   if [[ -t 0 ]]; then
-    prompt_required CONFIG_HOSTNAME "Domain for this VPS" "$host_default"
+    prompt_required CONFIG_HOSTNAME "SlowDNS tunnel domain" "$host_default"
   else
     if [[ -z "$host_default" ]]; then
-      echo "Domain is required in non-interactive mode. Pass SLOWDNS_HOSTNAME." >&2
+      echo "SlowDNS tunnel domain is required in non-interactive mode. Pass SLOWDNS_TUNNEL_DOMAIN or SLOWDNS_HOSTNAME." >&2
       exit 1
     fi
     CONFIG_HOSTNAME="$host_default"
+  fi
+
+  ns_default="${SLOWDNS_NS_HOST:-$existing_ns_host}"
+  if [[ -z "$ns_default" ]]; then
+    ns_default="$CONFIG_HOSTNAME"
+  fi
+  if [[ -t 0 ]]; then
+    prompt_required CONFIG_NS_HOST "SlowDNS nameserver host" "$ns_default"
+  else
+    CONFIG_NS_HOST="$ns_default"
   fi
 
   ip_default="${SLOWDNS_PUBLIC_IP:-$existing_ip}"
@@ -287,14 +309,16 @@ ensure_go() {
 }
 
 render_config() {
-  local hostname public_ip listen_port api_bind api_port mtu zone_prefix ns_prefix local_port
+  local hostname public_ip listen_port api_bind api_port mtu zone_prefix ns_prefix local_port ns_host tunnel_domain
   hostname="$CONFIG_HOSTNAME"
+  tunnel_domain="$CONFIG_HOSTNAME"
+  ns_host="$CONFIG_NS_HOST"
   public_ip="$CONFIG_PUBLIC_IP"
   listen_port="${SLOWDNS_LISTEN_PORT:-53}"
   api_bind="${SLOWDNS_API_BIND:-127.0.0.1}"
   api_port="${SLOWDNS_API_PORT:-8091}"
   mtu="${SLOWDNS_MTU:-512}"
-  zone_prefix="${SLOWDNS_ZONE_PREFIX:-dns}"
+  zone_prefix="${SLOWDNS_ZONE_PREFIX:-}"
   ns_prefix="${SLOWDNS_NS_PREFIX:-}"
   local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-8000}"
 
@@ -332,6 +356,8 @@ render_config() {
     "listen_port": $listen_port,
     "local_port": $local_port,
     "target": "127.0.0.1:22",
+    "tunnel_domain": "$tunnel_domain",
+    "ns_host": "$ns_host",
     "zone_prefix": "$zone_prefix",
     "ns_prefix": "$ns_prefix",
     "mtu": $mtu,

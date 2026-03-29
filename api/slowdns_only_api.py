@@ -55,7 +55,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "listen_port": 53,
         "local_port": 8000,
         "target": "127.0.0.1:22",
-        "zone_prefix": "dns",
+        "tunnel_domain": "",
+        "ns_host": "",
+        "zone_prefix": "",
         "ns_prefix": "",
         "mtu": 512,
         "public_key_path": "/opt/slowdns-only/config/server.pub",
@@ -261,15 +263,35 @@ class SlowDnsOnlyState:
     def slowdns_enabled(self) -> bool:
         return bool(self.slowdns_config().get("enabled", False))
 
+    @staticmethod
+    def _compose_dns_name(prefix: str, host: str) -> str:
+        prefix = str(prefix or "").strip(".")
+        host = str(host or "").strip(".")
+        if not prefix:
+            return host
+        if not host:
+            return prefix
+        if host == prefix or host.startswith(prefix + "."):
+            return host
+        return f"{prefix}.{host}"
+
     def slowdns_zone(self) -> str:
-        prefix = str(self.slowdns_config().get("zone_prefix") or "").strip(".")
+        config = self.slowdns_config()
+        explicit = str(config.get("tunnel_domain") or "").strip(".")
+        if explicit:
+            return explicit
+        prefix = str(config.get("zone_prefix") or "").strip(".")
         host = self.hostname().strip(".")
-        return f"{prefix}.{host}" if prefix else host
+        return self._compose_dns_name(prefix, host)
 
     def slowdns_ns_host(self) -> str:
-        prefix = str(self.slowdns_config().get("ns_prefix") or "").strip(".")
+        config = self.slowdns_config()
+        explicit = str(config.get("ns_host") or "").strip(".")
+        if explicit:
+            return explicit
+        prefix = str(config.get("ns_prefix") or "").strip(".")
         host = self.hostname().strip(".")
-        return f"{prefix}.{host}" if prefix else host
+        return self._compose_dns_name(prefix, host)
 
     def slowdns_public_key(self) -> str:
         path = pathlib.Path(str(self.slowdns_config().get("public_key_path") or ""))
