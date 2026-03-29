@@ -57,7 +57,7 @@ Installation on Linux:
 
 ```bash
 cd /root
-git clone <your-repo> slowdns-src
+git clone https://github.com/stellawills/slowdns.git slowdns-src
 bash slowdns-src/scripts/install.sh
 ```
 
