@@ -62,8 +62,13 @@ Installation on Linux:
 ```bash
 cd /root
 git clone https://github.com/stellawills/slowdns.git slowdns-src
-bash slowdns-src/scripts/install.sh
+bash slowdns-src/install.sh
 ```
+
+Operator entrypoint:
+
+- `install.sh` at the repo root is the only public installer entrypoint.
+- `scripts/` contains internal implementation details that back the root installer.
 
 Useful environment overrides:
 
@@ -74,7 +79,7 @@ SLOWDNS_LISTEN_PORT=53 \
 SLOWDNS_API_BIND=127.0.0.1 \
 SLOWDNS_API_PORT=8091 \
 SLOWDNS_MTU=512 \
-bash scripts/install.sh
+bash install.sh
 ```
 
 Service control after install:
