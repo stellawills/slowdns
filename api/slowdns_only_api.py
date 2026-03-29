@@ -52,7 +52,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "slowdns": {
         "enabled": True,
         "service": "slowdns-only-dnstt",
-        "listen_port": 53,
+        "listen_port": 5300,
+        "public_port": 53,
+        "redirect_53": True,
         "local_port": 8000,
         "target": "127.0.0.1:22",
         "tunnel_domain": "",
@@ -303,9 +305,11 @@ class SlowDnsOnlyState:
         if not self.slowdns_enabled():
             return None
         config = self.slowdns_config()
+        public_port = int(config.get("public_port", config.get("listen_port", 53)))
         return {
             "enabled": True,
             "listen_port": int(config.get("listen_port", 53)),
+            "public_port": public_port,
             "local_port": int(config.get("local_port", 8000)),
             "ns_host": self.slowdns_ns_host(),
             "public_key": self.slowdns_public_key(),
@@ -322,6 +326,7 @@ class SlowDnsOnlyState:
                     f"NS {self.slowdns_zone()} -> {self.slowdns_ns_host()} on the parent zone."
                 ),
                 "connect_host": self.slowdns_zone(),
+                "connect_port": public_port,
                 "client_local_host": "127.0.0.1",
                 "client_local_port": int(config.get("local_port", 8000)),
             },
@@ -648,7 +653,12 @@ class SlowDnsOnlyState:
         return {"meta": self.build_meta(200, "success", "Account updated"), "data": {"expired": str(row["date_exp"]), "pass_uuid": secret_value, "status_lock": new_state, "username": username}}
 
     def service_summary(self) -> List[Dict[str, Any]]:
-        services = ["slowdns-only-api", "slowdns-only-dnstt", "slowdns-only-expire-sync.timer"]
+        services = [
+            "slowdns-only-api",
+            "slowdns-only-dnstt",
+            "slowdns-only-udp53-redirect",
+            "slowdns-only-expire-sync.timer",
+        ]
         summary: List[Dict[str, Any]] = []
         for service in services:
             if os.name != "posix":

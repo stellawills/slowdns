@@ -56,6 +56,7 @@ Notes:
 - Installer prompts for both the SlowDNS tunnel domain and the NS host so you can control the DNS record shape.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
 - Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns-only/toolchain/` when the VPS has an outdated system Go.
+- When the daemon must bind an internal high port like `5300`, the installer can still expose standard UDP `53` externally via an automatic redirect service.
 - Default API bind is `127.0.0.1`; change it in config if you intentionally want remote access.
 - Default dnstt source is the pinned official upstream snapshot, not a third-party mirror.
 
@@ -85,7 +86,8 @@ Useful environment overrides:
 SLOWDNS_HOSTNAME=example.com \
 SLOWDNS_NS_HOST=ns1.example.com \
 SLOWDNS_PUBLIC_IP=203.0.113.10 \
-SLOWDNS_LISTEN_PORT=53 \
+SLOWDNS_LISTEN_PORT=5300 \
+SLOWDNS_PUBLIC_PORT=53 \
 SLOWDNS_API_BIND=127.0.0.1 \
 SLOWDNS_API_PORT=8091 \
 SLOWDNS_MTU=512 \

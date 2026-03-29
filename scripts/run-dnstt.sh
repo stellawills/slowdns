@@ -7,9 +7,10 @@ from pathlib import Path
 
 cfg = json.loads(Path("/opt/slowdns-only/config/config.json").read_text())
 slow = cfg["slowdns"]
+tunnel_domain = str(slow.get("tunnel_domain", "")).strip(".")
 host = str(cfg.get("hostname", "")).strip(".")
 zone_prefix = str(slow.get("zone_prefix", "")).strip(".")
-zone = f"{zone_prefix}.{host}" if zone_prefix else host
+zone = tunnel_domain or (f"{zone_prefix}.{host}" if zone_prefix else host)
 print(int(slow.get("listen_port", 53)))
 print(int(slow.get("mtu", 512)))
 print(str(slow.get("private_key_path", "/opt/slowdns-only/config/server.key")))

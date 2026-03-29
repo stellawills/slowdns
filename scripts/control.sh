@@ -5,7 +5,7 @@ ACTION="${1:-status}"
 
 case "$ACTION" in
   start|stop|restart|status)
-    systemctl "$ACTION" slowdns-only-api.service slowdns-only-dnstt.service
+    systemctl "$ACTION" slowdns-only-api.service slowdns-only-dnstt.service slowdns-only-udp53-redirect.service
     systemctl status slowdns-only-expire-sync.timer --no-pager || true
     ;;
   logs)

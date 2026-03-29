@@ -28,7 +28,9 @@
   "slowdns": {
     "enabled": true,
     "service": "slowdns-only-dnstt",
-    "listen_port": 53,
+    "listen_port": 5300,
+    "public_port": 53,
+    "redirect_53": true,
     "local_port": 8000,
     "target": "127.0.0.1:22",
     "tunnel_domain": "dns.example.com",

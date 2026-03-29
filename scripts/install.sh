@@ -123,7 +123,10 @@ for part in key.split("."):
     value = value.get(part, "")
 if value is None:
     value = ""
-print(str(value))
+if isinstance(value, bool):
+    print(str(value).lower())
+else:
+    print(str(value))
 PY
 }
 
@@ -138,7 +141,7 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y python3 curl unzip tar openssh-server ca-certificates
+    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables
   fi
 }
 
@@ -221,6 +224,7 @@ copy_project() {
   install -m 0755 "$PROJECT_DIR/scripts/control.sh" "$SCRIPTS_DIR/control.sh"
   install -m 0755 "$PROJECT_DIR/scripts/expire-sync.sh" "$SCRIPTS_DIR/expire-sync.sh"
   install -m 0755 "$PROJECT_DIR/scripts/menu.sh" "$SCRIPTS_DIR/menu.sh"
+  install -m 0755 "$PROJECT_DIR/scripts/udp53-redirect.sh" "$SCRIPTS_DIR/udp53-redirect.sh"
   ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/slowdns-menu
   ln -sf "$SCRIPTS_DIR/control.sh" /usr/local/bin/slowdns-service
   if ! command -v menu >/dev/null 2>&1; then
@@ -309,18 +313,44 @@ ensure_go() {
 }
 
 render_config() {
-  local hostname public_ip listen_port api_bind api_port mtu zone_prefix ns_prefix local_port ns_host tunnel_domain
+  local hostname public_ip listen_port public_port redirect_53 api_bind api_port mtu zone_prefix ns_prefix local_port ns_host tunnel_domain
+  local existing_listen_port existing_public_port existing_redirect existing_api_bind existing_api_port existing_mtu existing_zone_prefix existing_ns_prefix existing_local_port
   hostname="$CONFIG_HOSTNAME"
   tunnel_domain="$CONFIG_HOSTNAME"
   ns_host="$CONFIG_NS_HOST"
   public_ip="$CONFIG_PUBLIC_IP"
-  listen_port="${SLOWDNS_LISTEN_PORT:-53}"
-  api_bind="${SLOWDNS_API_BIND:-127.0.0.1}"
-  api_port="${SLOWDNS_API_PORT:-8091}"
-  mtu="${SLOWDNS_MTU:-512}"
-  zone_prefix="${SLOWDNS_ZONE_PREFIX:-}"
-  ns_prefix="${SLOWDNS_NS_PREFIX:-}"
-  local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-8000}"
+  existing_listen_port="$(trim "$(read_existing_config_value slowdns.listen_port)")"
+  existing_public_port="$(trim "$(read_existing_config_value slowdns.public_port)")"
+  existing_redirect="$(trim "$(read_existing_config_value slowdns.redirect_53)")"
+  existing_api_bind="$(trim "$(read_existing_config_value bind)")"
+  existing_api_port="$(trim "$(read_existing_config_value port)")"
+  existing_mtu="$(trim "$(read_existing_config_value slowdns.mtu)")"
+  existing_zone_prefix="$(trim "$(read_existing_config_value slowdns.zone_prefix)")"
+  existing_ns_prefix="$(trim "$(read_existing_config_value slowdns.ns_prefix)")"
+  existing_local_port="$(trim "$(read_existing_config_value slowdns.local_port)")"
+  listen_port="${SLOWDNS_LISTEN_PORT:-${existing_listen_port:-5300}}"
+  public_port="${SLOWDNS_PUBLIC_PORT:-$existing_public_port}"
+  if [[ -z "$public_port" ]]; then
+    if [[ "$listen_port" == "53" ]]; then
+      public_port="53"
+    else
+      public_port="53"
+    fi
+  fi
+  redirect_53="${SLOWDNS_REDIRECT_53:-$existing_redirect}"
+  if [[ -z "$redirect_53" ]]; then
+    if [[ "$public_port" == "53" && "$listen_port" != "53" ]]; then
+      redirect_53="true"
+    else
+      redirect_53="false"
+    fi
+  fi
+  api_bind="${SLOWDNS_API_BIND:-${existing_api_bind:-127.0.0.1}}"
+  api_port="${SLOWDNS_API_PORT:-${existing_api_port:-8091}}"
+  mtu="${SLOWDNS_MTU:-${existing_mtu:-512}}"
+  zone_prefix="${SLOWDNS_ZONE_PREFIX:-$existing_zone_prefix}"
+  ns_prefix="${SLOWDNS_NS_PREFIX:-$existing_ns_prefix}"
+  local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-${existing_local_port:-8000}}"
 
   cat >"$CONFIG_DIR/config.json" <<JSON
 {
@@ -336,13 +366,13 @@ render_config() {
     "shell": "/bin/false",
     "ws_path": "/sshws",
     "ports": {
-      "any": "22,$listen_port",
+      "any": "22,$public_port",
       "none": "-",
       "ssh": "22",
       "dropbear": "-",
       "ssl": "-",
       "ws": "-",
-      "slowdns": "$listen_port",
+      "slowdns": "$public_port",
       "squid": "-",
       "hysteria": "-",
       "ovpnohp": "-",
@@ -354,6 +384,8 @@ render_config() {
     "enabled": true,
     "service": "slowdns-only-dnstt",
     "listen_port": $listen_port,
+    "public_port": $public_port,
+    "redirect_53": $redirect_53,
     "local_port": $local_port,
     "target": "127.0.0.1:22",
     "tunnel_domain": "$tunnel_domain",
@@ -438,6 +470,22 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
+  cat >"$SYSTEMD_DIR/slowdns-only-udp53-redirect.service" <<UNIT
+[Unit]
+Description=SlowDNS Only UDP 53 redirect
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/slowdns-only/scripts/udp53-redirect.sh start
+ExecStop=/opt/slowdns-only/scripts/udp53-redirect.sh stop
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
   cat >"$SYSTEMD_DIR/slowdns-only-expire-sync.service" <<UNIT
 [Unit]
 Description=SlowDNS Only expiry synchronizer
@@ -464,6 +512,7 @@ UNIT
 
 start_services() {
   systemctl daemon-reload
+  systemctl enable --now slowdns-only-udp53-redirect.service
   systemctl enable --now slowdns-only-api.service
   systemctl enable --now slowdns-only-dnstt.service
   systemctl enable --now slowdns-only-expire-sync.timer
@@ -488,6 +537,7 @@ main() {
   generate_keys
   write_units
   start_services
+  ensure_service_active slowdns-only-udp53-redirect.service
   ensure_service_active slowdns-only-api.service
   ensure_service_active slowdns-only-dnstt.service
   echo "slowdns-only installed under $INSTALL_DIR"
