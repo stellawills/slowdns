@@ -15,14 +15,14 @@ import subprocess
 import sys
 import traceback
 import urllib.parse
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 
 APP_VERSION = "2026.03.29"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,20}$")
 MAX_BODY_BYTES = 1_048_576
 
-DEFAULT_CONFIG: dict[str, Any] = {
+DEFAULT_CONFIG: Dict[str, Any] = {
     "bind": "127.0.0.1",
     "port": 8091,
     "db_path": "/opt/slowdns-only/config/slowdns-only.db",
@@ -75,7 +75,7 @@ def utc_now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
-def merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+def merge_dicts(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
     result = copy.deepcopy(base)
     for key, value in overlay.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
@@ -85,7 +85,7 @@ def merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
     return result
 
 
-def load_config(path: pathlib.Path) -> dict[str, Any]:
+def load_config(path: pathlib.Path) -> Dict[str, Any]:
     config = copy.deepcopy(DEFAULT_CONFIG)
     if path.exists():
         loaded = json.loads(path.read_text(encoding="utf-8"))
@@ -115,7 +115,7 @@ def parse_duration(value: str) -> dt.timedelta:
     return dt.timedelta(days=amount)
 
 
-def quota_to_storage(kuota: int) -> tuple[int, str]:
+def quota_to_storage(kuota: int) -> Tuple[int, str]:
     if kuota <= 0:
         return 0, "0 GB"
     return kuota * 1024 * 1024 * 1024, f"{kuota} GB"
@@ -140,21 +140,21 @@ def random_password(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def get_optional(payload: dict[str, Any], *names: str, default: Any = None) -> Any:
+def get_optional(payload: Dict[str, Any], *names: str, default: Any = None) -> Any:
     for name in names:
         if name in payload:
             return payload[name]
     return default
 
 
-def get_required(payload: dict[str, Any], *names: str) -> str:
+def get_required(payload: Dict[str, Any], *names: str) -> str:
     value = get_optional(payload, *names, default=None)
     if value is None or str(value).strip() == "":
         raise ApiError(400, f"missing required field: {names[0]}")
     return str(value).strip()
 
 
-def get_int(payload: dict[str, Any], *names: str) -> int:
+def get_int(payload: Dict[str, Any], *names: str) -> int:
     value = get_required(payload, *names)
     try:
         return int(value)
@@ -162,7 +162,7 @@ def get_int(payload: dict[str, Any], *names: str) -> int:
         raise ApiError(400, f"{names[0]} must be an integer") from exc
 
 
-def get_optional_int(payload: dict[str, Any], *names: str, default: int | None = None) -> int | None:
+def get_optional_int(payload: Dict[str, Any], *names: str, default: Optional[int] = None) -> Optional[int]:
     value = get_optional(payload, *names, default=None)
     if value is None or str(value).strip() == "":
         return default
@@ -176,7 +176,7 @@ def expiry_timestamp(expires_on: str) -> int:
     return int(dt.datetime.fromisoformat(f"{expires_on}T00:00:00+00:00").timestamp())
 
 
-def row_value(row: sqlite3.Row | dict[str, Any], key: str, default: Any = None) -> Any:
+def row_value(row: Union[sqlite3.Row, Dict[str, Any]], key: str, default: Any = None) -> Any:
     if isinstance(row, sqlite3.Row):
         return row[key] if key in row.keys() else default
     return row.get(key, default)
@@ -227,7 +227,7 @@ class SlowDnsOnlyState:
             )
             conn.commit()
 
-    def build_meta(self, code: int, status: str, message: str) -> dict[str, Any]:
+    def build_meta(self, code: int, status: str, message: str) -> Dict[str, Any]:
         return {
             "code": code,
             "status": status,
@@ -235,10 +235,10 @@ class SlowDnsOnlyState:
             "message": message,
         }
 
-    def build_old_error(self, code: int, message: str) -> dict[str, Any]:
+    def build_old_error(self, code: int, message: str) -> Dict[str, Any]:
         return {"meta": self.build_meta(code, "error", message), "data": {}}
 
-    def build_list_response(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    def build_list_response(self, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         total = len(rows)
         return {
             "meta": self.build_meta(200, "success", f"Total {total}"),
@@ -252,10 +252,10 @@ class SlowDnsOnlyState:
     def public_ip(self) -> str:
         return str(self.config.get("public_ip") or "")
 
-    def ssh_config(self) -> dict[str, Any]:
+    def ssh_config(self) -> Dict[str, Any]:
         return dict(self.config.get("ssh") or {})
 
-    def slowdns_config(self) -> dict[str, Any]:
+    def slowdns_config(self) -> Dict[str, Any]:
         return dict(self.config.get("slowdns") or {})
 
     def slowdns_enabled(self) -> bool:
@@ -277,7 +277,7 @@ class SlowDnsOnlyState:
             return ""
         return path.read_text(encoding="utf-8").strip()
 
-    def slowdns_info(self) -> dict[str, Any] | None:
+    def slowdns_info(self) -> Optional[Dict[str, Any]]:
         if not self.slowdns_enabled():
             return None
         config = self.slowdns_config()
@@ -305,7 +305,7 @@ class SlowDnsOnlyState:
             },
         }
 
-    def _run(self, command: list[str], stdin: str | None = None) -> None:
+    def _run(self, command: List[str], stdin: Optional[str] = None) -> None:
         if self.dry_run:
             return
         subprocess.run(
@@ -353,7 +353,7 @@ class SlowDnsOnlyState:
         self._ensure_linux()
         self._run(["passwd", "-l", username])
 
-    def unlock_system_user(self, username: str, password: str | None = None) -> None:
+    def unlock_system_user(self, username: str, password: Optional[str] = None) -> None:
         if not self.ssh_config().get("manage_system_users", True):
             return
         self._ensure_linux()
@@ -367,17 +367,17 @@ class SlowDnsOnlyState:
         self._ensure_linux()
         self._run(["chpasswd"], stdin=f"{username}:{password}\n")
 
-    def fetch_account(self, username: str) -> sqlite3.Row | None:
+    def fetch_account(self, username: str) -> Optional[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute("SELECT * FROM account_sshs WHERE username = ?", (username,)).fetchone()
 
-    def list_accounts(self) -> list[dict[str, Any]]:
+    def list_accounts(self) -> List[Dict[str, Any]]:
         self.reconcile_expired_accounts()
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM account_sshs ORDER BY username ASC").fetchall()
         return [dict(row) for row in rows]
 
-    def list_recovery_accounts(self) -> list[dict[str, Any]]:
+    def list_recovery_accounts(self) -> List[Dict[str, Any]]:
         rows = self.list_accounts()
         return [
             row
@@ -410,7 +410,7 @@ class SlowDnsOnlyState:
             conn.commit()
         return updated
 
-    def build_ssh_payload(self, username: str, password: str, expires_on: str) -> dict[str, Any]:
+    def build_ssh_payload(self, username: str, password: str, expires_on: str) -> Dict[str, Any]:
         host = self.hostname()
         ssh_cfg = self.ssh_config()
         ws_path = str(ssh_cfg.get("ws_path", "/sshws") or "/sshws")
@@ -451,8 +451,8 @@ class SlowDnsOnlyState:
         limit_ip: int,
         max_bw_gb: int,
         trial: bool = False,
-        trial_until: dt.datetime | None = None,
-    ) -> dict[str, Any]:
+        trial_until: Optional[dt.datetime] = None,
+    ) -> Dict[str, Any]:
         if self.fetch_account(username):
             raise ApiError(409, "username already exists")
         if trial_until:
@@ -490,7 +490,7 @@ class SlowDnsOnlyState:
             conn.commit()
         return self.build_ssh_payload(username, password, expires_on)
 
-    def update_limit_ip(self, limit_ip: int, username: str | None = None) -> dict[str, Any]:
+    def update_limit_ip(self, limit_ip: int, username: Optional[str] = None) -> Dict[str, Any]:
         with self.connect() as conn:
             if username:
                 cursor = conn.execute(
@@ -509,7 +509,7 @@ class SlowDnsOnlyState:
             raise ApiError(404, "account not found")
         return {"meta": self.build_meta(200, "success", "Limit IP updated"), "data": {"message": f"limit ip => {limit_ip}", "username": changed_user}}
 
-    def update_bandwidth(self, kuota_gb: int, reset_bw: bool, username: str | None = None) -> dict[str, Any]:
+    def update_bandwidth(self, kuota_gb: int, reset_bw: bool, username: Optional[str] = None) -> Dict[str, Any]:
         max_bw, max_bw_hum = quota_to_storage(kuota_gb)
         if username:
             sql = """
@@ -539,7 +539,7 @@ class SlowDnsOnlyState:
             raise ApiError(404, "account not found")
         return {"meta": self.build_meta(200, "success", "Bandwidth updated"), "data": {"message": f"quota => {max_bw_hum}", "username": changed_user}}
 
-    def modify_account(self, username: str, new_password: str) -> dict[str, Any]:
+    def modify_account(self, username: str, new_password: str) -> Dict[str, Any]:
         row = self.fetch_account(username)
         if not row:
             raise ApiError(404, "account not found")
@@ -552,7 +552,7 @@ class SlowDnsOnlyState:
             conn.commit()
         return {"meta": self.build_meta(200, "success", "Account updated"), "data": {"pass_uuid": new_password, "username": username}}
 
-    def renew_account(self, username: str, expired_days: int, kuota_gb: int | None = None) -> dict[str, Any]:
+    def renew_account(self, username: str, expired_days: int, kuota_gb: Optional[int] = None) -> Dict[str, Any]:
         row = self.fetch_account(username)
         if not row:
             raise ApiError(404, "account not found")
@@ -583,7 +583,7 @@ class SlowDnsOnlyState:
         self.create_system_user(username, str(row["password"]), new_exp)
         return {"meta": self.build_meta(200, "success", "Account renewed"), "data": {"from": current_exp, "quota": max_bw_hum, "to": new_exp, "username": username}}
 
-    def delete_account(self, username: str) -> dict[str, Any]:
+    def delete_account(self, username: str) -> Dict[str, Any]:
         row = self.fetch_account(username)
         if not row:
             raise ApiError(404, "account not found")
@@ -593,7 +593,7 @@ class SlowDnsOnlyState:
             conn.commit()
         return {"meta": self.build_meta(200, "success", "Account deleted"), "data": {"username": username}}
 
-    def set_lock_state(self, username: str, locked: bool, password_override: str | None = None) -> dict[str, Any]:
+    def set_lock_state(self, username: str, locked: bool, password_override: Optional[str] = None) -> Dict[str, Any]:
         row = self.fetch_account(username)
         if not row:
             raise ApiError(404, "account not found")
@@ -625,9 +625,9 @@ class SlowDnsOnlyState:
             conn.commit()
         return {"meta": self.build_meta(200, "success", "Account updated"), "data": {"expired": str(row["date_exp"]), "pass_uuid": secret_value, "status_lock": new_state, "username": username}}
 
-    def service_summary(self) -> list[dict[str, Any]]:
+    def service_summary(self) -> List[Dict[str, Any]]:
         services = ["slowdns-only-api", "slowdns-only-dnstt", "slowdns-only-expire-sync.timer"]
-        summary: list[dict[str, Any]] = []
+        summary: List[Dict[str, Any]] = []
         for service in services:
             if os.name != "posix":
                 summary.append({"name": service, "active": "unsupported", "enabled": "unsupported"})
@@ -641,7 +641,7 @@ class SlowDnsOnlyState:
             summary.append({"name": service, "active": active, "enabled": enabled})
         return summary
 
-    def runtime_summary(self) -> dict[str, Any]:
+    def runtime_summary(self) -> Dict[str, Any]:
         return {
             "version": APP_VERSION,
             "hostname": self.hostname(),
@@ -669,7 +669,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
 
-    def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+    def _send_json(self, status: int, payload: Dict[str, Any]) -> None:
         raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -677,16 +677,16 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _send_v2_success(self, status: int, data: dict[str, Any], meta: dict[str, Any] | None = None) -> None:
+    def _send_v2_success(self, status: int, data: Dict[str, Any], meta: Optional[Dict[str, Any]] = None) -> None:
         payload = {"data": data, "meta": {"request_id": secrets.token_hex(8), "timestamp": utc_now().isoformat()}, "error": None}
         if meta:
             payload["meta"].update(meta)
         self._send_json(status, payload)
 
-    def _send_v2_error(self, status: int, code: str, message: str, details: dict[str, Any] | None = None) -> None:
+    def _send_v2_error(self, status: int, code: str, message: str, details: Optional[Dict[str, Any]] = None) -> None:
         self._send_json(status, {"data": None, "meta": {"request_id": secrets.token_hex(8), "timestamp": utc_now().isoformat()}, "error": {"code": code, "message": message, "details": details or {}}})
 
-    def _read_body(self) -> dict[str, Any]:
+    def _read_body(self) -> Dict[str, Any]:
         raw_length = self.headers.get("Content-Length")
         try:
             length = int(raw_length or 0)
@@ -707,7 +707,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
             raise ApiError(400, "request body must be a JSON object")
         return parsed
 
-    def _v2_account_row(self, row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    def _v2_account_row(self, row: Union[sqlite3.Row, Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "username": row_value(row, "username", ""),
             "expires_on": row_value(row, "date_exp", ""),
@@ -733,12 +733,12 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
             return 0
         return max_bw // (1024 * 1024 * 1024)
 
-    def _v2_account_detail(self, row: sqlite3.Row) -> dict[str, Any]:
+    def _v2_account_detail(self, row: sqlite3.Row) -> Dict[str, Any]:
         username = str(row["username"])
         config = self.server.state.build_ssh_payload(username, str(row["password"]), str(row["date_exp"]))["data"]
         return {"protocol": "ssh", "account": self._v2_account_row(row), "config": config}
 
-    def _create_account(self, body: dict[str, Any], trial: bool, recovery: bool) -> dict[str, Any]:
+    def _create_account(self, body: Dict[str, Any], trial: bool, recovery: bool) -> Dict[str, Any]:
         state = self.server.state
         if trial:
             duration = parse_duration(get_required(body, "timelimit", "duration"))
@@ -762,7 +762,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
             raise ApiError(400, "password is required")
         return state.insert_ssh_account(username, str(password), expired_days, limit_ip, kuota, trial=trial, trial_until=trial_until)
 
-    def _handle_patch_route(self, route: str) -> dict[str, Any]:
+    def _handle_patch_route(self, route: str) -> Dict[str, Any]:
         state = self.server.state
         renew = re.fullmatch(r"^/vps/renewsshvpn/(?P<username>[^/]+)/(?P<expired>\d+)$", route)
         if renew:
@@ -775,7 +775,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
             return state.set_lock_state(safe_username(unlock.group("username")), False, unlock.group("password"))
         raise ApiError(404, "route not found")
 
-    def _handle_v2_account_patch(self, username: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _handle_v2_account_patch(self, username: str, body: Dict[str, Any]) -> Dict[str, Any]:
         state = self.server.state
         row = state.fetch_account(username)
         if not row:
@@ -803,7 +803,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
             raise ApiError(404, "account not found")
         return self._v2_account_detail(row)
 
-    def _handle_v2_route(self, method: str, route: str, body: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str, Any] | None]:
+    def _handle_v2_route(self, method: str, route: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any], Optional[Dict[str, Any]]]:
         state = self.server.state
         if route == "/api/v2/healthz" and method == "GET":
             return 200, {"status": "ok", "version": "2"}, None
@@ -853,7 +853,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
                 return 200, {"protocol": "ssh", "deleted": True, "username": username}, None
         raise ApiError(404, "route not found")
 
-    def _handle_route(self, method: str, route: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _handle_route(self, method: str, route: str, body: Dict[str, Any]) -> Dict[str, Any]:
         state = self.server.state
         if method == "GET":
             if route == "/vps/listuserssshvpn":
@@ -923,7 +923,7 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
 class SlowDnsOnlyServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], handler: type[SlowDnsOnlyHandler], state: SlowDnsOnlyState) -> None:
+    def __init__(self, address: Tuple[str, int], handler: Type[SlowDnsOnlyHandler], state: SlowDnsOnlyState) -> None:
         super().__init__(address, handler)
         self.state = state
 
