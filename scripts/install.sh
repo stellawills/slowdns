@@ -256,12 +256,38 @@ copy_project() {
   install -m 0755 "$PROJECT_DIR/scripts/udp53-redirect.sh" "$SCRIPTS_DIR/udp53-redirect.sh"
   ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/slowdns-menu
   ln -sf "$SCRIPTS_DIR/control.sh" /usr/local/bin/slowdns-service
-  if ! command -v menu >/dev/null 2>&1; then
+  if [[ ! -e /usr/local/bin/menu ]]; then
     ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/menu
+  elif [[ -L /usr/local/bin/menu ]]; then
+    local current_menu=""
+    current_menu="$(readlink /usr/local/bin/menu || true)"
+    if [[ "$current_menu" == "/opt/slowdns-only/scripts/menu.sh" || "$current_menu" == "/opt/slowdns/scripts/menu.sh" ]]; then
+      ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/menu
+    fi
   fi
   if [[ ! -e "$LEGACY_INSTALL_DIR" ]]; then
     ln -s "$INSTALL_DIR" "$LEGACY_INSTALL_DIR"
   fi
+}
+
+write_legacy_shims() {
+  if [[ -L "$LEGACY_INSTALL_DIR" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$LEGACY_INSTALL_DIR/scripts"
+
+  cat >"$LEGACY_INSTALL_DIR/scripts/menu.sh" <<'SH'
+#!/usr/bin/env bash
+exec /opt/slowdns/scripts/menu.sh "$@"
+SH
+
+  cat >"$LEGACY_INSTALL_DIR/scripts/control.sh" <<'SH'
+#!/usr/bin/env bash
+exec /opt/slowdns/scripts/control.sh "$@"
+SH
+
+  chmod 0755 "$LEGACY_INSTALL_DIR/scripts/menu.sh" "$LEGACY_INSTALL_DIR/scripts/control.sh"
 }
 
 migrate_legacy_state() {
@@ -595,6 +621,7 @@ main() {
   copy_project
   render_config
   migrate_legacy_state
+  write_legacy_shims
   build_dnstt
   generate_keys
   write_units
