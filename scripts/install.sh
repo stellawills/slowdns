@@ -36,6 +36,7 @@ LICENSE_INSTALL_TOKEN=""
 INSTALL_CODE_HINT=""
 LICENSE_CONFIRMED="false"
 DNSTT_BUILD_TMPDIR=""
+LICENSE_BANNER_SHOWN="false"
 
 trim() {
   local value="${1:-}"
@@ -46,6 +47,16 @@ trim() {
 
 lower() {
   printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
+print_section() {
+  local title="${1:-}"
+  if [[ -z "$title" ]]; then
+    return 0
+  fi
+  printf '\n============================================================\n'
+  printf ' %s\n' "$title"
+  printf '============================================================\n'
 }
 
 is_true() {
@@ -319,18 +330,72 @@ detect_ssh_fingerprint() {
   printf '%s' "$fingerprint"
 }
 
+license_error_message() {
+  local page_url="${1:-}"
+  python3 - "$page_url" <<'PY'
+import json
+import sys
+
+page_url = sys.argv[1]
+raw = sys.stdin.read().strip()
+if not raw:
+    print("SlowDNS activation failed.")
+    raise SystemExit(0)
+
+try:
+    data = json.loads(raw)
+except Exception:
+    print("SlowDNS activation failed.")
+    raise SystemExit(0)
+
+error = data.get("error") or {}
+code = str(error.get("code") or "").strip()
+message = str(error.get("message") or "").strip()
+
+known = {
+    "install_code_used": f"Install code already used. Generate a fresh code at {page_url}.",
+    "install_code_expired": f"Install code expired. Generate a fresh code at {page_url}.",
+    "install_code_not_found": f"Install code not found. Generate a fresh code at {page_url}.",
+    "validation_error": message or "Install code was invalid.",
+    "token_invalid": "Activation token was rejected by the license server.",
+    "token_mismatch": "Activation confirmation did not match the issued token.",
+    "activation_not_found": "Activation session was not found on the license server.",
+}
+
+if code in known:
+    print(known[code])
+elif message:
+    print(message)
+else:
+    print("SlowDNS activation failed.")
+PY
+}
+
+show_license_banner() {
+  if [[ "$LICENSE_BANNER_SHOWN" == "true" ]]; then
+    return 0
+  fi
+  LICENSE_BANNER_SHOWN="true"
+  print_section "SlowDNS Install Code"
+  printf ' Generate code at: %s\n' "$LICENSE_PAGE_URL"
+  printf ' This code is single-use and expires quickly.\n\n'
+}
+
 license_prompt_key() {
   if ! license_requested; then
     return 0
   fi
   if [[ -n "$INSTALL_CODE" ]]; then
+    show_license_banner
+    printf ' Using install code from environment.\n'
     return 0
   fi
   if [[ ! -t 0 ]]; then
     echo "SLOWDNS_INSTALL_CODE is required in non-interactive mode." >&2
     exit 1
   fi
-  prompt_required INSTALL_CODE "SlowDNS install code (generate at ${LICENSE_PAGE_URL})"
+  show_license_banner
+  prompt_required INSTALL_CODE "Enter install code"
 }
 
 json_query() {
@@ -375,10 +440,8 @@ license_post_json() {
   rm -f "$tmp"
 
   if [[ "$status" != 2* ]]; then
-    if [[ -n "$body" ]]; then
-      printf '%s\n' "$body" >&2
-    fi
-    echo "license api request failed with HTTP $status" >&2
+    license_error_message "$LICENSE_PAGE_URL" <<<"$body" >&2
+    echo "License request failed with HTTP $status." >&2
     exit 1
   fi
 
@@ -393,6 +456,7 @@ license_activate() {
   fi
 
   license_prompt_key
+  printf 'Validating install code...\n'
   machine_id="$(detect_machine_id)"
   ssh_fingerprint="$(detect_ssh_fingerprint)"
 
@@ -422,6 +486,7 @@ PY
   if [[ -z "$INSTALL_CODE_HINT" ]]; then
     INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint" 2>/dev/null || true)"
   fi
+  printf 'Install code accepted. Continuing setup...\n'
 }
 
 license_confirm() {
@@ -439,9 +504,11 @@ print(json.dumps({
 }, separators=(",", ":")))
 PY
 )"
+  printf 'Confirming activation...\n'
   response="$(license_post_json "/api/v2/slowdns/install/confirm" "$payload")"
   printf '%s' "$response" | json_query "data.status" >/dev/null
   LICENSE_CONFIRMED="true"
+  printf 'Activation confirmed.\n'
 }
 
 license_release() {
@@ -877,6 +944,7 @@ main() {
   install_packages
   resolve_install_values
   license_activate
+  printf 'Preparing SlowDNS files...\n'
   copy_project
   render_config
   migrate_legacy_state
@@ -885,6 +953,7 @@ main() {
   generate_keys
   write_units
   cleanup_legacy_units
+  printf 'Starting SlowDNS services...\n'
   start_services
   ensure_service_active slowdns-udp53-redirect.service
   ensure_service_active slowdns-api.service
