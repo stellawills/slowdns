@@ -21,7 +21,7 @@ What it provides:
 - optional `menu` command on standalone boxes where `menu` is not already installed
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
-- optional private machine-bound license activation during install
+- private machine-bound install-code activation during install
 
 Main compatibility routes:
 
@@ -51,9 +51,9 @@ V2-compatible routes:
 
 Notes:
 
-- Installation is token-free.
+- Installation requires a short-lived public `IPT-SD-...` install code from `https://license.internetshub.com/slowdns`.
 - API access is also token-free by design.
-- License-gated installs are available as an optional activation layer when you host a private activation API such as `license.internetshub.com/slowdns`.
+- Install-code activation is enabled by default against your private backend at `https://license.internetshub.com`.
 - Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
 - Installer prompts for the public hostname and delegated SlowDNS tunnel domain, then automatically uses the public hostname as the NS target host.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
@@ -65,14 +65,6 @@ Notes:
 Installation on Linux:
 
 ```bash
-bash <(curl -4fsSL https://raw.githubusercontent.com/stellawills/slowdns/main/install.sh)
-```
-
-License-gated install:
-
-```bash
-SLOWDNS_LICENSE_URL=https://license.internetshub.com/slowdns \
-SLOWDNS_LICENSE_ENFORCE=true \
 bash <(curl -4fsSL https://raw.githubusercontent.com/stellawills/slowdns/main/install.sh)
 ```
 
@@ -106,11 +98,10 @@ SLOWDNS_MTU=512 \
 bash install.sh
 ```
 
-Optional license activation overrides:
+Non-interactive install example:
 
 ```bash
-SLOWDNS_LICENSE_URL=https://license.internetshub.com/slowdns \
-SLOWDNS_LICENSE_ENFORCE=true \
+SLOWDNS_LICENSE_URL=https://license.internetshub.com \
 SLOWDNS_INSTALL_CODE=IPT-SD-XXXXXX-XXXXXX-XXXXXX \
 bash install.sh
 ```
@@ -143,4 +134,4 @@ NS  slowdns.example.com   dns.example.com
 Activation server note:
 
 - the public GitHub repo only contains the installer-side activation hook
-- the actual license server implementation should stay private on your own backend
+- the actual install-code server implementation should stay private on your own backend

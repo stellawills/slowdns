@@ -20,10 +20,11 @@ GO_MIN_VERSION="${GO_MIN_VERSION:-1.21.0}"
 GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-1.22.12}"
 GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
 INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
-LICENSE_URL="${SLOWDNS_LICENSE_URL:-}"
+DEFAULT_LICENSE_URL="${DEFAULT_LICENSE_URL:-https://license.internetshub.com}"
+LICENSE_URL="${SLOWDNS_LICENSE_URL:-$DEFAULT_LICENSE_URL}"
 LICENSE_PRODUCT="${SLOWDNS_LICENSE_PRODUCT:-slowdns}"
 INSTALL_CODE="${SLOWDNS_INSTALL_CODE:-${SLOWDNS_LICENSE_KEY:-}}"
-LICENSE_ENFORCE="${SLOWDNS_LICENSE_ENFORCE:-false}"
+LICENSE_PAGE_URL="${SLOWDNS_LICENSE_PAGE_URL:-${LICENSE_URL%/}/slowdns}"
 CONFIG_HOSTNAME=""
 CONFIG_TUNNEL_DOMAIN=""
 CONFIG_PUBLIC_IP=""
@@ -34,6 +35,7 @@ LICENSE_ACTIVATION_ID=""
 LICENSE_INSTALL_TOKEN=""
 INSTALL_CODE_HINT=""
 LICENSE_CONFIRMED="false"
+DNSTT_BUILD_TMPDIR=""
 
 trim() {
   local value="${1:-}"
@@ -176,12 +178,12 @@ install_packages() {
 }
 
 license_requested() {
-  [[ -n "$LICENSE_URL" || -n "$INSTALL_CODE" ]] || is_true "$LICENSE_ENFORCE"
+  return 0
 }
 
 validate_license_settings() {
   if license_requested && [[ -z "$LICENSE_URL" ]]; then
-    echo "SLOWDNS_LICENSE_URL is required when license activation is enabled." >&2
+    echo "SLOWDNS_LICENSE_URL is required for SlowDNS install-code activation." >&2
     exit 1
   fi
 }
@@ -328,7 +330,7 @@ license_prompt_key() {
     echo "SLOWDNS_INSTALL_CODE is required in non-interactive mode." >&2
     exit 1
   fi
-  prompt_required INSTALL_CODE "SlowDNS install code"
+  prompt_required INSTALL_CODE "SlowDNS install code (generate at ${LICENSE_PAGE_URL})"
 }
 
 json_query() {
@@ -413,7 +415,7 @@ print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 
-  response="$(license_post_json "/api/v1/install/activate" "$payload")"
+  response="$(license_post_json "/api/v2/slowdns/install/activate" "$payload")"
   LICENSE_ACTIVATION_ID="$(printf '%s' "$response" | json_query "data.activation_id")"
   LICENSE_INSTALL_TOKEN="$(printf '%s' "$response" | json_query "data.install_token")"
   INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code" 2>/dev/null || true)"
@@ -437,7 +439,7 @@ print(json.dumps({
 }, separators=(",", ":")))
 PY
 )"
-  response="$(license_post_json "/api/v1/install/confirm" "$payload")"
+  response="$(license_post_json "/api/v2/slowdns/install/confirm" "$payload")"
   printf '%s' "$response" | json_query "data.status" >/dev/null
   LICENSE_CONFIRMED="true"
 }
@@ -458,7 +460,7 @@ print(json.dumps({
 }, separators=(",", ":")))
 PY
 )"
-  license_post_json "/api/v1/install/release" "$payload" >/dev/null 2>&1 || true
+  license_post_json "/api/v2/slowdns/install/release" "$payload" >/dev/null 2>&1 || true
 }
 
 write_license_metadata() {
@@ -489,6 +491,10 @@ PY
 cleanup_on_exit() {
   local code=$?
   set +e
+  if [[ -n "${DNSTT_BUILD_TMPDIR:-}" && -d "${DNSTT_BUILD_TMPDIR}" ]]; then
+    rm -rf "${DNSTT_BUILD_TMPDIR}"
+    DNSTT_BUILD_TMPDIR=""
+  fi
   if [[ "$code" -ne 0 ]]; then
     license_release
   fi
@@ -735,12 +741,11 @@ build_dnstt() {
 
   ensure_go
 
-  local tmpdir srcdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
-  curl -fsSL "$DNSTT_SOURCE_URL" -o "$tmpdir/dnstt.zip"
-  unzip -q "$tmpdir/dnstt.zip" -d "$tmpdir"
-  srcdir="$(find "$tmpdir" -maxdepth 1 -type d -name 'dnstt-*' | head -n1)"
+  local srcdir
+  DNSTT_BUILD_TMPDIR="$(mktemp -d)"
+  curl -fsSL "$DNSTT_SOURCE_URL" -o "$DNSTT_BUILD_TMPDIR/dnstt.zip"
+  unzip -q "$DNSTT_BUILD_TMPDIR/dnstt.zip" -d "$DNSTT_BUILD_TMPDIR"
+  srcdir="$(find "$DNSTT_BUILD_TMPDIR" -maxdepth 1 -type d -name 'dnstt-*' | head -n1)"
   if [[ -z "$srcdir" ]]; then
     echo "failed to unpack dnstt source" >&2
     exit 1
@@ -748,6 +753,8 @@ build_dnstt() {
   (cd "$srcdir/dnstt-server" && "$GO_CMD" build -o "$BIN_DIR/dnstt-server")
   (cd "$srcdir/dnstt-client" && "$GO_CMD" build -o "$BIN_DIR/dnstt-client")
   chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
+  rm -rf "$DNSTT_BUILD_TMPDIR"
+  DNSTT_BUILD_TMPDIR=""
 }
 
 generate_keys() {
