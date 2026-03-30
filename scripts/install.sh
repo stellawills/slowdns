@@ -488,7 +488,7 @@ license_post_json() {
 }
 
 license_activate() {
-  local machine_id ssh_fingerprint payload response
+  local machine_id ssh_fingerprint payload response _resp_tmp _resp_rc
 
   if ! license_requested; then
     return 0
@@ -520,7 +520,12 @@ print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 
-    if ! response="$(license_post_json "/api/v2/slowdns/install/activate" "$payload")"; then
+    _resp_tmp="$(mktemp)"
+    _resp_rc=0
+    license_post_json "/api/v2/slowdns/install/activate" "$payload" > "$_resp_tmp" || _resp_rc=$?
+    response="$(cat "$_resp_tmp")"
+    rm -f "$_resp_tmp"
+    if [[ "$_resp_rc" -ne 0 ]]; then
       [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] && echo "$LICENSE_LAST_ERROR_MESSAGE" >&2
       if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
         echo "License request failed with HTTP $LICENSE_LAST_HTTP_STATUS." >&2
@@ -558,7 +563,7 @@ PY
 }
 
 license_confirm() {
-  local payload response
+  local payload response _resp_tmp _resp_rc
   if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" ]]; then
     return 0
   fi
@@ -573,7 +578,12 @@ print(json.dumps({
 PY
 )"
   printf 'Confirming activation...\n'
-  if ! response="$(license_post_json "/api/v2/slowdns/install/confirm" "$payload")"; then
+  _resp_tmp="$(mktemp)"
+  _resp_rc=0
+  license_post_json "/api/v2/slowdns/install/confirm" "$payload" > "$_resp_tmp" || _resp_rc=$?
+  response="$(cat "$_resp_tmp")"
+  rm -f "$_resp_tmp"
+  if [[ "$_resp_rc" -ne 0 ]]; then
     [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] && echo "$LICENSE_LAST_ERROR_MESSAGE" >&2
     if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
       echo "License request failed with HTTP $LICENSE_LAST_HTTP_STATUS." >&2
