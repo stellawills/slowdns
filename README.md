@@ -21,6 +21,7 @@ What it provides:
 - optional `menu` command on standalone boxes where `menu` is not already installed
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
+- optional machine-bound license activation during install
 
 Main compatibility routes:
 
@@ -52,6 +53,7 @@ Notes:
 
 - Installation is token-free.
 - API access is also token-free by design.
+- License-gated installs are available as an optional activation layer when you host `license.internetshub.com/slowdns`.
 - Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
 - Installer prompts for the public hostname and delegated SlowDNS tunnel domain, then automatically uses the public hostname as the NS target host.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
@@ -64,6 +66,20 @@ Installation on Linux:
 
 ```bash
 bash <(curl -4fsSL https://raw.githubusercontent.com/stellawills/slowdns/main/install.sh)
+```
+
+License-gated install:
+
+```bash
+SLOWDNS_LICENSE_URL=https://license.internetshub.com/slowdns \
+SLOWDNS_LICENSE_ENFORCE=true \
+bash <(curl -4fsSL https://raw.githubusercontent.com/stellawills/slowdns/main/install.sh)
+```
+
+Or host the provided wrapper from [license_server/install.sh](C:/Users/ROG/Documents/Dev/Scripts/SSH/.codex-main-worktree/license_server/install.sh) on your domain and use:
+
+```bash
+bash <(curl -4fsSL https://license.internetshub.com/slowdns/install.sh)
 ```
 
 Clone-based install also works:
@@ -94,6 +110,15 @@ SLOWDNS_MTU=512 \
 bash install.sh
 ```
 
+Optional license activation overrides:
+
+```bash
+SLOWDNS_LICENSE_URL=https://license.internetshub.com/slowdns \
+SLOWDNS_LICENSE_ENFORCE=true \
+SLOWDNS_LICENSE_KEY=IPT-SD-XXXXXX-XXXXXX-XXXXXX \
+bash install.sh
+```
+
 Advanced override:
 
 - `SLOWDNS_NS_HOST` is still supported if you intentionally want the NS target host to differ from the public hostname.
@@ -118,3 +143,7 @@ Preferred DNS layout for this standalone service:
 A   dns.example.com        203.0.113.10
 NS  slowdns.example.com   dns.example.com
 ```
+
+Activation server reference:
+
+- [license_server/README.md](C:/Users/ROG/Documents/Dev/Scripts/SSH/.codex-main-worktree/license_server/README.md)

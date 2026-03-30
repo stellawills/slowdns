@@ -19,17 +19,42 @@ DNSTT_CLIENT_URL="${DNSTT_CLIENT_URL:-}"
 GO_MIN_VERSION="${GO_MIN_VERSION:-1.21.0}"
 GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-1.22.12}"
 GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
+INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
+LICENSE_URL="${SLOWDNS_LICENSE_URL:-}"
+LICENSE_PRODUCT="${SLOWDNS_LICENSE_PRODUCT:-slowdns}"
+LICENSE_KEY="${SLOWDNS_LICENSE_KEY:-}"
+LICENSE_ENFORCE="${SLOWDNS_LICENSE_ENFORCE:-false}"
 CONFIG_HOSTNAME=""
 CONFIG_TUNNEL_DOMAIN=""
 CONFIG_PUBLIC_IP=""
 CONFIG_NS_HOST=""
 GO_CMD=""
+LICENSE_METADATA_PATH="$CONFIG_DIR/license.json"
+LICENSE_ACTIVATION_ID=""
+LICENSE_INSTALL_TOKEN=""
+LICENSE_KEY_HINT=""
+LICENSE_CONFIRMED="false"
 
 trim() {
   local value="${1:-}"
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
+}
+
+lower() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
+is_true() {
+  case "$(lower "${1:-}")" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 is_ipv4() {
@@ -150,6 +175,17 @@ install_packages() {
   fi
 }
 
+license_requested() {
+  [[ -n "$LICENSE_URL" || -n "$LICENSE_KEY" ]] || is_true "$LICENSE_ENFORCE"
+}
+
+validate_license_settings() {
+  if license_requested && [[ -z "$LICENSE_URL" ]]; then
+    echo "SLOWDNS_LICENSE_URL is required when license activation is enabled." >&2
+    exit 1
+  fi
+}
+
 detect_public_ip() {
   if [[ -n "${SLOWDNS_PUBLIC_IP:-}" ]]; then
     printf '%s\n' "$SLOWDNS_PUBLIC_IP"
@@ -243,6 +279,214 @@ resolve_install_values() {
     ip_default="$detected_ip"
   fi
   prompt_public_ip "$ip_default"
+}
+
+detect_machine_id() {
+  local path value=""
+  for path in /etc/machine-id /var/lib/dbus/machine-id; do
+    if [[ -f "$path" ]]; then
+      value="$(tr -d '[:space:]' < "$path" 2>/dev/null || true)"
+      [[ -n "$value" ]] && break
+    fi
+  done
+  if [[ -z "$value" ]] && command -v hostnamectl >/dev/null 2>&1; then
+    value="$(hostnamectl --machine-id 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  if [[ -z "$value" ]]; then
+    echo "unable to detect machine-id for license activation" >&2
+    exit 1
+  fi
+  printf '%s' "$value"
+}
+
+detect_ssh_fingerprint() {
+  local key_path fingerprint=""
+  for key_path in \
+    /etc/ssh/ssh_host_ed25519_key.pub \
+    /etc/ssh/ssh_host_ecdsa_key.pub \
+    /etc/ssh/ssh_host_rsa_key.pub; do
+    if [[ -f "$key_path" ]]; then
+      fingerprint="$(ssh-keygen -l -E sha256 -f "$key_path" 2>/dev/null | awk '{print $2}' | head -n1)"
+      [[ -n "$fingerprint" ]] && break
+    fi
+  done
+  if [[ -z "$fingerprint" ]]; then
+    echo "unable to detect SSH host fingerprint for license activation" >&2
+    exit 1
+  fi
+  printf '%s' "$fingerprint"
+}
+
+license_prompt_key() {
+  if ! license_requested; then
+    return 0
+  fi
+  if [[ -n "$LICENSE_KEY" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    echo "SLOWDNS_LICENSE_KEY is required in non-interactive mode." >&2
+    exit 1
+  fi
+  prompt_required LICENSE_KEY "SlowDNS install license key"
+}
+
+json_query() {
+  local path="$1"
+  python3 - "$path" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+raw = sys.stdin.read()
+if not raw.strip():
+    raise SystemExit(1)
+data = json.loads(raw)
+value = data
+for part in path.split("."):
+    if isinstance(value, dict):
+        value = value.get(part)
+    else:
+        value = None
+        break
+if value is None:
+    raise SystemExit(1)
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif isinstance(value, (dict, list)):
+    print(json.dumps(value, separators=(",", ":")))
+else:
+    print(value)
+PY
+}
+
+license_post_json() {
+  local route="$1" payload="$2"
+  local tmp status body
+  tmp="$(mktemp)"
+  status="$(curl -4sS -o "$tmp" -w "%{http_code}" \
+    -H "Content-Type: application/json" \
+    -X POST \
+    -d "$payload" \
+    "${LICENSE_URL%/}${route}")"
+  body="$(cat "$tmp")"
+  rm -f "$tmp"
+
+  if [[ "$status" != 2* ]]; then
+    if [[ -n "$body" ]]; then
+      printf '%s\n' "$body" >&2
+    fi
+    echo "license api request failed with HTTP $status" >&2
+    exit 1
+  fi
+
+  printf '%s' "$body"
+}
+
+license_activate() {
+  local machine_id ssh_fingerprint payload response
+
+  if ! license_requested; then
+    return 0
+  fi
+
+  license_prompt_key
+  machine_id="$(detect_machine_id)"
+  ssh_fingerprint="$(detect_ssh_fingerprint)"
+
+  payload="$(python3 - "$LICENSE_KEY" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
+import json
+import sys
+
+payload = {
+    "license_key": sys.argv[1].strip().upper(),
+    "product": sys.argv[2].strip().lower(),
+    "hostname": sys.argv[3].strip().lower(),
+    "public_ip": sys.argv[4].strip(),
+    "machine_id": sys.argv[5].strip(),
+    "ssh_fingerprint": sys.argv[6].strip(),
+    "requested_ref": "main",
+    "installer_version": sys.argv[7].strip(),
+}
+print(json.dumps(payload, separators=(",", ":")))
+PY
+)"
+
+  response="$(license_post_json "/api/v1/install/activate" "$payload")"
+  LICENSE_ACTIVATION_ID="$(printf '%s' "$response" | json_query "data.activation_id")"
+  LICENSE_INSTALL_TOKEN="$(printf '%s' "$response" | json_query "data.install_token")"
+  LICENSE_KEY_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint")"
+}
+
+license_confirm() {
+  local payload response
+  if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" ]]; then
+    return 0
+  fi
+  payload="$(python3 - "$LICENSE_ACTIVATION_ID" "$LICENSE_INSTALL_TOKEN" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "activation_id": sys.argv[1].strip(),
+    "install_token": sys.argv[2].strip(),
+}, separators=(",", ":")))
+PY
+)"
+  response="$(license_post_json "/api/v1/install/confirm" "$payload")"
+  printf '%s' "$response" | json_query "data.status" >/dev/null
+  LICENSE_CONFIRMED="true"
+}
+
+license_release() {
+  local payload
+  if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_KEY" || "$LICENSE_CONFIRMED" == "true" ]]; then
+    return 0
+  fi
+  payload="$(python3 - "$LICENSE_ACTIVATION_ID" "$LICENSE_KEY" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "activation_id": sys.argv[1].strip(),
+    "license_key": sys.argv[2].strip().upper(),
+}, separators=(",", ":")))
+PY
+)"
+  license_post_json "/api/v1/install/release" "$payload" >/dev/null 2>&1 || true
+}
+
+write_license_metadata() {
+  if [[ "$LICENSE_CONFIRMED" != "true" ]]; then
+    rm -f "$LICENSE_METADATA_PATH"
+    return 0
+  fi
+  python3 - "$LICENSE_METADATA_PATH" "$LICENSE_URL" "$LICENSE_PRODUCT" "$LICENSE_KEY_HINT" "$LICENSE_ACTIVATION_ID" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" <<'PY'
+import datetime as dt
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = {
+    "license_url": sys.argv[2],
+    "product": sys.argv[3],
+    "license_key_hint": sys.argv[4],
+    "activation_id": sys.argv[5],
+    "hostname": sys.argv[6],
+    "public_ip": sys.argv[7],
+    "confirmed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+}
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+cleanup_on_exit() {
+  local code=$?
+  set +e
+  if [[ "$code" -ne 0 ]]; then
+    license_release
+  fi
 }
 
 copy_project() {
@@ -615,9 +859,12 @@ ensure_service_active() {
 }
 
 main() {
+  trap cleanup_on_exit EXIT
   require_root
+  validate_license_settings
   install_packages
   resolve_install_values
+  license_activate
   copy_project
   render_config
   migrate_legacy_state
@@ -630,10 +877,15 @@ main() {
   ensure_service_active slowdns-udp53-redirect.service
   ensure_service_active slowdns-api.service
   ensure_service_active slowdns-dnstt.service
+  license_confirm
+  write_license_metadata
   echo "slowdns installed under $INSTALL_DIR"
   echo "api: systemctl status slowdns-api"
   echo "dnstt: systemctl status slowdns-dnstt"
   echo "menu: slowdns-menu"
+  if [[ "$LICENSE_CONFIRMED" == "true" ]]; then
+    echo "license: ${LICENSE_KEY_HINT} activated via ${LICENSE_URL}"
+  fi
 }
 
 main "$@"
