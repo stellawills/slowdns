@@ -386,8 +386,10 @@ license_prompt_key() {
     return 0
   fi
   if [[ -n "$INSTALL_CODE" ]]; then
-    show_license_banner
-    printf ' Using install code from environment.\n'
+    if [[ -n "${SLOWDNS_INSTALL_CODE:-${SLOWDNS_LICENSE_KEY:-}}" ]]; then
+      show_license_banner
+      printf ' Using install code from environment.\n'
+    fi
     return 0
   fi
   if [[ ! -t 0 ]]; then
@@ -395,7 +397,7 @@ license_prompt_key() {
     exit 1
   fi
   show_license_banner
-  prompt_required INSTALL_CODE "Enter install code"
+  prompt_required INSTALL_CODE "SlowDNS install code"
 }
 
 json_query() {
@@ -942,6 +944,7 @@ main() {
   require_root
   validate_license_settings
   install_packages
+  license_prompt_key
   resolve_install_values
   license_activate
   printf 'Preparing SlowDNS files...\n'
