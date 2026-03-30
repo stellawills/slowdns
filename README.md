@@ -21,7 +21,7 @@ What it provides:
 - optional `menu` command on standalone boxes where `menu` is not already installed
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
-- optional machine-bound license activation during install
+- optional private machine-bound license activation during install
 
 Main compatibility routes:
 
@@ -53,7 +53,7 @@ Notes:
 
 - Installation is token-free.
 - API access is also token-free by design.
-- License-gated installs are available as an optional activation layer when you host `license.internetshub.com/slowdns`.
+- License-gated installs are available as an optional activation layer when you host a private activation API such as `license.internetshub.com/slowdns`.
 - Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
 - Installer prompts for the public hostname and delegated SlowDNS tunnel domain, then automatically uses the public hostname as the NS target host.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
@@ -76,11 +76,7 @@ SLOWDNS_LICENSE_ENFORCE=true \
 bash <(curl -4fsSL https://raw.githubusercontent.com/stellawills/slowdns/main/install.sh)
 ```
 
-Or host the provided wrapper from [license_server/install.sh](C:/Users/ROG/Documents/Dev/Scripts/SSH/.codex-main-worktree/license_server/install.sh) on your domain and use:
-
-```bash
-bash <(curl -4fsSL https://license.internetshub.com/slowdns/install.sh)
-```
+Open `https://license.internetshub.com/slowdns`, generate a one-time `IPT-SD-...` install code, then paste that code into the installer when prompted.
 
 Clone-based install also works:
 
@@ -115,7 +111,7 @@ Optional license activation overrides:
 ```bash
 SLOWDNS_LICENSE_URL=https://license.internetshub.com/slowdns \
 SLOWDNS_LICENSE_ENFORCE=true \
-SLOWDNS_LICENSE_KEY=IPT-SD-XXXXXX-XXXXXX-XXXXXX \
+SLOWDNS_INSTALL_CODE=IPT-SD-XXXXXX-XXXXXX-XXXXXX \
 bash install.sh
 ```
 
@@ -144,6 +140,7 @@ A   dns.example.com        203.0.113.10
 NS  slowdns.example.com   dns.example.com
 ```
 
-Activation server reference:
+Activation server note:
 
-- [license_server/README.md](C:/Users/ROG/Documents/Dev/Scripts/SSH/.codex-main-worktree/license_server/README.md)
+- the public GitHub repo only contains the installer-side activation hook
+- the actual license server implementation should stay private on your own backend

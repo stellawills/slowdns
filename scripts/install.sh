@@ -22,7 +22,7 @@ GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
 INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
 LICENSE_URL="${SLOWDNS_LICENSE_URL:-}"
 LICENSE_PRODUCT="${SLOWDNS_LICENSE_PRODUCT:-slowdns}"
-LICENSE_KEY="${SLOWDNS_LICENSE_KEY:-}"
+INSTALL_CODE="${SLOWDNS_INSTALL_CODE:-${SLOWDNS_LICENSE_KEY:-}}"
 LICENSE_ENFORCE="${SLOWDNS_LICENSE_ENFORCE:-false}"
 CONFIG_HOSTNAME=""
 CONFIG_TUNNEL_DOMAIN=""
@@ -32,7 +32,7 @@ GO_CMD=""
 LICENSE_METADATA_PATH="$CONFIG_DIR/license.json"
 LICENSE_ACTIVATION_ID=""
 LICENSE_INSTALL_TOKEN=""
-LICENSE_KEY_HINT=""
+INSTALL_CODE_HINT=""
 LICENSE_CONFIRMED="false"
 
 trim() {
@@ -176,7 +176,7 @@ install_packages() {
 }
 
 license_requested() {
-  [[ -n "$LICENSE_URL" || -n "$LICENSE_KEY" ]] || is_true "$LICENSE_ENFORCE"
+  [[ -n "$LICENSE_URL" || -n "$INSTALL_CODE" ]] || is_true "$LICENSE_ENFORCE"
 }
 
 validate_license_settings() {
@@ -321,14 +321,14 @@ license_prompt_key() {
   if ! license_requested; then
     return 0
   fi
-  if [[ -n "$LICENSE_KEY" ]]; then
+  if [[ -n "$INSTALL_CODE" ]]; then
     return 0
   fi
   if [[ ! -t 0 ]]; then
-    echo "SLOWDNS_LICENSE_KEY is required in non-interactive mode." >&2
+    echo "SLOWDNS_INSTALL_CODE is required in non-interactive mode." >&2
     exit 1
   fi
-  prompt_required LICENSE_KEY "SlowDNS install license key"
+  prompt_required INSTALL_CODE "SlowDNS install code"
 }
 
 json_query() {
@@ -394,11 +394,12 @@ license_activate() {
   machine_id="$(detect_machine_id)"
   ssh_fingerprint="$(detect_ssh_fingerprint)"
 
-  payload="$(python3 - "$LICENSE_KEY" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
+  payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
 import json
 import sys
 
 payload = {
+    "install_code": sys.argv[1].strip().upper(),
     "license_key": sys.argv[1].strip().upper(),
     "product": sys.argv[2].strip().lower(),
     "hostname": sys.argv[3].strip().lower(),
@@ -415,7 +416,10 @@ PY
   response="$(license_post_json "/api/v1/install/activate" "$payload")"
   LICENSE_ACTIVATION_ID="$(printf '%s' "$response" | json_query "data.activation_id")"
   LICENSE_INSTALL_TOKEN="$(printf '%s' "$response" | json_query "data.install_token")"
-  LICENSE_KEY_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint")"
+  INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code" 2>/dev/null || true)"
+  if [[ -z "$INSTALL_CODE_HINT" ]]; then
+    INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint" 2>/dev/null || true)"
+  fi
 }
 
 license_confirm() {
@@ -440,16 +444,17 @@ PY
 
 license_release() {
   local payload
-  if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_KEY" || "$LICENSE_CONFIRMED" == "true" ]]; then
+  if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$INSTALL_CODE" || "$LICENSE_CONFIRMED" == "true" ]]; then
     return 0
   fi
-  payload="$(python3 - "$LICENSE_ACTIVATION_ID" "$LICENSE_KEY" <<'PY'
+  payload="$(python3 - "$LICENSE_ACTIVATION_ID" "$INSTALL_CODE" <<'PY'
 import json
 import sys
 
 print(json.dumps({
     "activation_id": sys.argv[1].strip(),
     "license_key": sys.argv[2].strip().upper(),
+    "install_code": sys.argv[2].strip().upper(),
 }, separators=(",", ":")))
 PY
 )"
@@ -461,7 +466,7 @@ write_license_metadata() {
     rm -f "$LICENSE_METADATA_PATH"
     return 0
   fi
-  python3 - "$LICENSE_METADATA_PATH" "$LICENSE_URL" "$LICENSE_PRODUCT" "$LICENSE_KEY_HINT" "$LICENSE_ACTIVATION_ID" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" <<'PY'
+  python3 - "$LICENSE_METADATA_PATH" "$LICENSE_URL" "$LICENSE_PRODUCT" "$INSTALL_CODE_HINT" "$LICENSE_ACTIVATION_ID" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" <<'PY'
 import datetime as dt
 import json
 import pathlib
@@ -471,7 +476,7 @@ path = pathlib.Path(sys.argv[1])
 payload = {
     "license_url": sys.argv[2],
     "product": sys.argv[3],
-    "license_key_hint": sys.argv[4],
+    "install_code_hint": sys.argv[4],
     "activation_id": sys.argv[5],
     "hostname": sys.argv[6],
     "public_ip": sys.argv[7],
@@ -884,7 +889,7 @@ main() {
   echo "dnstt: systemctl status slowdns-dnstt"
   echo "menu: slowdns-menu"
   if [[ "$LICENSE_CONFIRMED" == "true" ]]; then
-    echo "license: ${LICENSE_KEY_HINT} activated via ${LICENSE_URL}"
+    echo "install code: ${INSTALL_CODE_HINT} activated via ${LICENSE_URL}"
   fi
 }
 
