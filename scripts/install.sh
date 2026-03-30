@@ -37,6 +37,9 @@ INSTALL_CODE_HINT=""
 LICENSE_CONFIRMED="false"
 DNSTT_BUILD_TMPDIR=""
 LICENSE_BANNER_SHOWN="false"
+LICENSE_LAST_HTTP_STATUS=""
+LICENSE_LAST_ERROR_CODE=""
+LICENSE_LAST_ERROR_MESSAGE=""
 
 trim() {
   local value="${1:-}"
@@ -371,6 +374,26 @@ else:
 PY
 }
 
+license_error_code() {
+  python3 - <<'PY'
+import json
+import sys
+
+raw = sys.stdin.read().strip()
+if not raw:
+    raise SystemExit(1)
+try:
+    data = json.loads(raw)
+except Exception:
+    raise SystemExit(1)
+error = data.get("error") or {}
+code = str(error.get("code") or "").strip()
+if not code:
+    raise SystemExit(1)
+print(code)
+PY
+}
+
 show_license_banner() {
   if [[ "$LICENSE_BANNER_SHOWN" == "true" ]]; then
     return 0
@@ -431,20 +454,34 @@ PY
 
 license_post_json() {
   local route="$1" payload="$2"
-  local tmp status body
+  local tmp status body curl_rc
   tmp="$(mktemp)"
+  LICENSE_LAST_HTTP_STATUS=""
+  LICENSE_LAST_ERROR_CODE=""
+  LICENSE_LAST_ERROR_MESSAGE=""
+  set +e
   status="$(curl -4sS -o "$tmp" -w "%{http_code}" \
     -H "Content-Type: application/json" \
     -X POST \
     -d "$payload" \
     "${LICENSE_URL%/}${route}")"
+  curl_rc=$?
+  set -e
   body="$(cat "$tmp")"
   rm -f "$tmp"
 
+  if [[ "$curl_rc" -ne 0 ]]; then
+    LICENSE_LAST_ERROR_CODE="network_error"
+    LICENSE_LAST_ERROR_MESSAGE="Could not reach the license server at ${LICENSE_URL%/}. Check network access and try again."
+    return 1
+  fi
+
   if [[ "$status" != 2* ]]; then
-    license_error_message "$LICENSE_PAGE_URL" <<<"$body" >&2
-    echo "License request failed with HTTP $status." >&2
-    exit 1
+    LICENSE_LAST_HTTP_STATUS="$status"
+    LICENSE_LAST_ERROR_CODE="$(license_error_code <<<"$body" 2>/dev/null || true)"
+    LICENSE_LAST_ERROR_MESSAGE="$(license_error_message "$LICENSE_PAGE_URL" <<<"$body")"
+    [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] || LICENSE_LAST_ERROR_MESSAGE="License request failed with HTTP $status."
+    return 1
   fi
 
   printf '%s' "$body"
@@ -457,12 +494,14 @@ license_activate() {
     return 0
   fi
 
-  license_prompt_key
-  printf 'Validating install code...\n'
   machine_id="$(detect_machine_id)"
   ssh_fingerprint="$(detect_ssh_fingerprint)"
 
-  payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
+  while true; do
+    license_prompt_key
+    printf 'Validating install code...\n'
+
+    payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
 import json
 import sys
 
@@ -481,14 +520,41 @@ print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 
-  response="$(license_post_json "/api/v2/slowdns/install/activate" "$payload")"
-  LICENSE_ACTIVATION_ID="$(printf '%s' "$response" | json_query "data.activation_id")"
-  LICENSE_INSTALL_TOKEN="$(printf '%s' "$response" | json_query "data.install_token")"
-  INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code" 2>/dev/null || true)"
-  if [[ -z "$INSTALL_CODE_HINT" ]]; then
-    INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint" 2>/dev/null || true)"
-  fi
-  printf 'Install code accepted. Continuing setup...\n'
+    if ! response="$(license_post_json "/api/v2/slowdns/install/activate" "$payload")"; then
+      [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] && echo "$LICENSE_LAST_ERROR_MESSAGE" >&2
+      if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
+        echo "License request failed with HTTP $LICENSE_LAST_HTTP_STATUS." >&2
+      fi
+      if [[ -t 0 ]]; then
+        case "$LICENSE_LAST_ERROR_CODE" in
+          install_code_used|install_code_expired|install_code_not_found|validation_error|network_error)
+            echo "Try again with a fresh SlowDNS install code." >&2
+            INSTALL_CODE=""
+            continue
+            ;;
+        esac
+      fi
+      exit 1
+    fi
+
+    LICENSE_ACTIVATION_ID="$(printf '%s' "$response" | json_query "data.activation_id" 2>/dev/null || true)"
+    LICENSE_INSTALL_TOKEN="$(printf '%s' "$response" | json_query "data.install_token" 2>/dev/null || true)"
+    INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code" 2>/dev/null || true)"
+    if [[ -z "$INSTALL_CODE_HINT" ]]; then
+      INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint" 2>/dev/null || true)"
+    fi
+    if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" ]]; then
+      echo "License server returned an invalid activation response." >&2
+      if [[ -t 0 ]]; then
+        echo "Try again with a fresh SlowDNS install code." >&2
+        INSTALL_CODE=""
+        continue
+      fi
+      exit 1
+    fi
+    printf 'Install code accepted. Continuing setup...\n'
+    break
+  done
 }
 
 license_confirm() {
@@ -507,8 +573,17 @@ print(json.dumps({
 PY
 )"
   printf 'Confirming activation...\n'
-  response="$(license_post_json "/api/v2/slowdns/install/confirm" "$payload")"
-  printf '%s' "$response" | json_query "data.status" >/dev/null
+  if ! response="$(license_post_json "/api/v2/slowdns/install/confirm" "$payload")"; then
+    [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] && echo "$LICENSE_LAST_ERROR_MESSAGE" >&2
+    if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
+      echo "License request failed with HTTP $LICENSE_LAST_HTTP_STATUS." >&2
+    fi
+    exit 1
+  fi
+  if ! printf '%s' "$response" | json_query "data.status" >/dev/null 2>&1; then
+    echo "License server returned an invalid confirmation response." >&2
+    exit 1
+  fi
   LICENSE_CONFIRMED="true"
   printf 'Activation confirmed.\n'
 }
