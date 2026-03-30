@@ -550,6 +550,10 @@ PY
     fi
     if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" ]]; then
       echo "License server returned an invalid activation response." >&2
+      echo "--- DEBUG: raw server response (first 500 chars) ---" >&2
+      printf '%s' "$response" | head -c 500 >&2
+      echo "" >&2
+      echo "--- END DEBUG ---" >&2
       if [[ -t 0 ]]; then
         echo "Try again with a fresh SlowDNS install code." >&2
         INSTALL_CODE=""
