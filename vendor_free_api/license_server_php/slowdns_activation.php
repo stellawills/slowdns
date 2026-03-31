@@ -460,9 +460,12 @@ function v2_slowdns_release_install(): never {
     )->execute([$activation_id]);
 
     if ($can_restore_code && $code_id > 0) {
+        // Roll back the activation_count increment as well — the install was
+        // abandoned, so the slot should not count against the code's limit.
         db()->prepare(
             "UPDATE slowdns_install_codes
-             SET status = 'issued', consumed_at = NULL
+             SET status = 'issued', consumed_at = NULL,
+                 activation_count = GREATEST(0, activation_count - 1)
              WHERE id = ?"
         )->execute([$code_id]);
     }
