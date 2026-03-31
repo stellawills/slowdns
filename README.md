@@ -53,7 +53,7 @@ Notes:
 
 - Installation requires a short-lived public `IPT-SD-...` install code from `https://license.internetshub.com/slowdns`.
 - API access is also token-free by design.
-- Install-code activation is enabled by default against your private backend at `https://license.internetshub.com`.
+- Install-code activation is locked to `https://license.internetshub.com`.
 - Installer validates the install code first, then prompts for the public hostname, delegated SlowDNS tunnel domain, and public IPv4.
 - Installer automatically uses the public hostname as the NS target host unless `SLOWDNS_NS_HOST` is explicitly set.
 - On SSH sessions with `screen` available, the installer re-launches itself in `screen -S slowdns-install` so it can survive a dropped connection.
@@ -102,7 +102,6 @@ bash install.sh
 Non-interactive install example:
 
 ```bash
-SLOWDNS_LICENSE_URL=https://license.internetshub.com \
 SLOWDNS_INSTALL_CODE=IPT-SD-XXXXXX-XXXXXX-XXXXXX \
 bash install.sh
 ```

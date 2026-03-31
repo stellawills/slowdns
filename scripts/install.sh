@@ -20,11 +20,11 @@ GO_MIN_VERSION="${GO_MIN_VERSION:-1.21.0}"
 GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-1.22.12}"
 GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
 INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
-DEFAULT_LICENSE_URL="${DEFAULT_LICENSE_URL:-https://license.internetshub.com}"
-LICENSE_URL="${SLOWDNS_LICENSE_URL:-$DEFAULT_LICENSE_URL}"
-LICENSE_PRODUCT="${SLOWDNS_LICENSE_PRODUCT:-slowdns}"
+DEFAULT_LICENSE_URL="https://license.internetshub.com"
+LICENSE_URL="$DEFAULT_LICENSE_URL"
+LICENSE_PRODUCT="slowdns"
 INSTALL_CODE="${SLOWDNS_INSTALL_CODE:-${SLOWDNS_LICENSE_KEY:-}}"
-LICENSE_PAGE_URL="${SLOWDNS_LICENSE_PAGE_URL:-${LICENSE_URL%/}/slowdns}"
+LICENSE_PAGE_URL="${LICENSE_URL%/}/slowdns"
 CONFIG_HOSTNAME=""
 CONFIG_TUNNEL_DOMAIN=""
 CONFIG_PUBLIC_IP=""
@@ -237,13 +237,11 @@ validate_license_settings() {
     return 0
   fi
   if [[ -z "$LICENSE_URL" ]]; then
-    printf '%sERROR: SLOWDNS_LICENSE_URL is required for SlowDNS install-code activation.%s\n' "$_c_red" "$_c_reset" >&2
+    printf '%sERROR: SlowDNS install-code activation is not configured with a license server.%s\n' "$_c_red" "$_c_reset" >&2
     exit 1
   fi
-  if [[ "$LICENSE_URL" != https://* ]]; then
-    printf '%sERROR: SLOWDNS_LICENSE_URL must use HTTPS to protect activation credentials.%s\n' "$_c_red" "$_c_reset" >&2
-    printf '  Got:      %s\n' "$LICENSE_URL" >&2
-    printf '  Expected: https://...\n' >&2
+  if [[ "$LICENSE_URL" != "$DEFAULT_LICENSE_URL" ]]; then
+    printf '%sERROR: This installer is locked to %s and cannot use an alternate license server.%s\n' "$_c_red" "$DEFAULT_LICENSE_URL" "$_c_reset" >&2
     exit 1
   fi
 }
