@@ -13,12 +13,16 @@ LOG_DIR="$INSTALL_DIR/logs"
 TOOLCHAIN_DIR="$INSTALL_DIR/toolchain"
 SYSTEMD_DIR="/etc/systemd/system"
 
-DNSTT_SOURCE_URL="${DNSTT_SOURCE_URL:-https://www.bamsoftware.com/software/dnstt/dnstt-20241021.zip}"
-DNSTT_SERVER_URL="${DNSTT_SERVER_URL:-}"
-DNSTT_CLIENT_URL="${DNSTT_CLIENT_URL:-}"
-GO_MIN_VERSION="${GO_MIN_VERSION:-1.21.0}"
-GO_BOOTSTRAP_VERSION="${GO_BOOTSTRAP_VERSION:-1.22.12}"
-GO_BOOTSTRAP_BASE_URL="${GO_BOOTSTRAP_BASE_URL:-https://go.dev/dl}"
+DNSTT_SOURCE_URL="https://www.bamsoftware.com/software/dnstt/dnstt-20241021.zip"
+DNSTT_SOURCE_SIGNATURE_URL="https://www.bamsoftware.com/software/dnstt/dnstt-20241021.zip.asc"
+DNSTT_SOURCE_PUBLIC_KEY_URL="https://www.bamsoftware.com/david/david.asc"
+DNSTT_SERVER_URL=""
+DNSTT_CLIENT_URL=""
+GO_MIN_VERSION="1.21.0"
+GO_BOOTSTRAP_VERSION="1.22.12"
+GO_BOOTSTRAP_BASE_URL="https://go.dev/dl"
+GO_BOOTSTRAP_SHA256_AMD64="4fa4f869b0f7fc6bb1eb2660e74657fbf04cdd290b5aef905585c86051b34d43"
+GO_BOOTSTRAP_SHA256_ARM64="fd017e647ec28525e86ae8203236e0653242722a7436929b1f775744e26278e7"
 INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
 DEFAULT_LICENSE_URL="https://license.internetshub.com"
 LICENSE_URL="$DEFAULT_LICENSE_URL"
@@ -65,6 +69,38 @@ trim() {
 
 lower() {
   printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+    return 0
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$path" | awk '{print $1}'
+    return 0
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "$path" | awk '{print $NF}'
+    return 0
+  fi
+  echo "No SHA-256 tool available (sha256sum, shasum, or openssl)." >&2
+  exit 1
+}
+
+verify_sha256() {
+  local expected actual path label
+  expected="$(lower "$1")"
+  path="$2"
+  label="${3:-$2}"
+  actual="$(lower "$(sha256_file "$path")")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "SHA-256 mismatch for $label" >&2
+    echo "expected: $expected" >&2
+    echo "actual:   $actual" >&2
+    exit 1
+  fi
 }
 
 print_section() {
@@ -201,7 +237,7 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables screen
+    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables screen gnupg
   fi
 }
 
@@ -729,17 +765,16 @@ PY
 
 license_release() {
   local payload
-  if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$INSTALL_CODE" || "$LICENSE_CONFIRMED" == "true" ]]; then
+  if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" || "$LICENSE_CONFIRMED" == "true" ]]; then
     return 0
   fi
-  payload="$(python3 - "$LICENSE_ACTIVATION_ID" "$INSTALL_CODE" <<'PY'
+  payload="$(python3 - "$LICENSE_ACTIVATION_ID" "$LICENSE_INSTALL_TOKEN" <<'PY'
 import json
 import sys
 
 print(json.dumps({
     "activation_id": sys.argv[1].strip(),
-    "license_key": sys.argv[2].strip().upper(),
-    "install_code": sys.argv[2].strip().upper(),
+    "install_token": sys.argv[2].strip(),
 }, separators=(",", ":")))
 PY
 )"
@@ -872,30 +907,36 @@ go_version_ok() {
   (( current_num >= required_num ))
 }
 
-detect_go_archive_name() {
-  local arch=""
+detect_go_archive_info() {
+  local arch="" archive_name="" archive_sha=""
   case "$(uname -m)" in
     x86_64|amd64)
       arch="amd64"
+      archive_sha="$GO_BOOTSTRAP_SHA256_AMD64"
       ;;
     aarch64|arm64)
       arch="arm64"
+      archive_sha="$GO_BOOTSTRAP_SHA256_ARM64"
       ;;
     *)
       echo "unsupported architecture for Go bootstrap: $(uname -m)" >&2
       exit 1
       ;;
   esac
-  printf 'go%s.linux-%s.tar.gz' "$GO_BOOTSTRAP_VERSION" "$arch"
+  archive_name="go%s.linux-%s.tar.gz"
+  printf '%s|%s' "$(printf "$archive_name" "$GO_BOOTSTRAP_VERSION" "$arch")" "$archive_sha"
 }
 
 bootstrap_go_toolchain() {
-  local archive_name archive_url tmpdir archive_path
-  archive_name="$(detect_go_archive_name)"
+  local archive_name archive_url archive_sha tmpdir archive_path info
+  info="$(detect_go_archive_info)"
+  archive_name="${info%%|*}"
+  archive_sha="${info##*|}"
   archive_url="${GO_BOOTSTRAP_BASE_URL}/${archive_name}"
   tmpdir="$(mktemp -d)"
   archive_path="$tmpdir/$archive_name"
   curl -fsSL "$archive_url" -o "$archive_path"
+  verify_sha256 "$archive_sha" "$archive_path" "$archive_name"
   rm -rf "$TOOLCHAIN_DIR/go"
   mkdir -p "$TOOLCHAIN_DIR"
   tar -xzf "$archive_path" -C "$TOOLCHAIN_DIR"
@@ -1023,10 +1064,26 @@ build_dnstt() {
   fi
 
   ensure_go
+  command -v gpg >/dev/null 2>&1 || {
+    echo "gpg is required to verify the dnstt source signature" >&2
+    exit 1
+  }
 
-  local srcdir
+  local srcdir sig_path pubkey_path gnupg_home
   DNSTT_BUILD_TMPDIR="$(mktemp -d)"
   curl -fsSL "$DNSTT_SOURCE_URL" -o "$DNSTT_BUILD_TMPDIR/dnstt.zip"
+  curl -fsSL "$DNSTT_SOURCE_SIGNATURE_URL" -o "$DNSTT_BUILD_TMPDIR/dnstt.zip.asc"
+  curl -fsSL "$DNSTT_SOURCE_PUBLIC_KEY_URL" -o "$DNSTT_BUILD_TMPDIR/david.asc"
+  sig_path="$DNSTT_BUILD_TMPDIR/dnstt.zip.asc"
+  pubkey_path="$DNSTT_BUILD_TMPDIR/david.asc"
+  gnupg_home="$DNSTT_BUILD_TMPDIR/gnupg"
+  mkdir -p "$gnupg_home"
+  chmod 0700 "$gnupg_home"
+  gpg --batch --homedir "$gnupg_home" --import "$pubkey_path" >/dev/null 2>&1
+  if ! gpg --batch --homedir "$gnupg_home" --verify "$sig_path" "$DNSTT_BUILD_TMPDIR/dnstt.zip" >/dev/null 2>&1; then
+    echo "dnstt source signature verification failed" >&2
+    exit 1
+  fi
   unzip -q "$DNSTT_BUILD_TMPDIR/dnstt.zip" -d "$DNSTT_BUILD_TMPDIR"
   srcdir="$(find "$DNSTT_BUILD_TMPDIR" -maxdepth 1 -type d -name 'dnstt-*' | head -n1)"
   if [[ -z "$srcdir" ]]; then
