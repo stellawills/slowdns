@@ -162,13 +162,12 @@ read_existing_config_value() {
   if [[ ! -f "$path" ]]; then
     return 0
   fi
-  python3 - "$path" "$key" <<'PY'
-import json
-import pathlib
-import sys
-
+  # python3 -c passes source via CLI arg, keeping stdin free (consistent with
+  # the rest of this installer that reads data through stdin or sys.argv).
+  python3 -c '
+import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
-key = sys.argv[2]
+key  = sys.argv[2]
 try:
     cfg = json.loads(path.read_text(encoding="utf-8"))
 except Exception:
@@ -185,7 +184,7 @@ if isinstance(value, bool):
     print(str(value).lower())
 else:
     print(str(value))
-PY
+' "$path" "$key"
 }
 
 require_root() {
@@ -208,10 +207,35 @@ license_requested() {
 }
 
 validate_license_settings() {
-  if license_requested && [[ -z "$LICENSE_URL" ]]; then
-    echo "SLOWDNS_LICENSE_URL is required for SlowDNS install-code activation." >&2
+  if ! license_requested; then
+    return 0
+  fi
+  if [[ -z "$LICENSE_URL" ]]; then
+    printf '%sERROR: SLOWDNS_LICENSE_URL is required for SlowDNS install-code activation.%s\n' "$_c_red" "$_c_reset" >&2
     exit 1
   fi
+  if [[ "$LICENSE_URL" != https://* ]]; then
+    printf '%sERROR: SLOWDNS_LICENSE_URL must use HTTPS to protect activation credentials.%s\n' "$_c_red" "$_c_reset" >&2
+    printf '  Got:      %s\n' "$LICENSE_URL" >&2
+    printf '  Expected: https://...\n' >&2
+    exit 1
+  fi
+}
+
+check_installer_version() {
+  # Silently skip if curl is not yet available (runs after install_packages in main).
+  command -v curl >/dev/null 2>&1 || return 0
+  local version_url="https://raw.githubusercontent.com/stellawills/slowdns/main/VERSION"
+  local latest=""
+  latest="$(curl -4fsSL --max-time 8 "$version_url" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ -z "$latest" || "$latest" == "$INSTALLER_VERSION" ]]; then
+    return 0
+  fi
+  printf '%sWarning: This installer (%s) is outdated. Latest version: %s%s\n' \
+    "$_c_yellow" "$INSTALLER_VERSION" "$latest" "$_c_reset" >&2
+  printf '  Download the latest installer from: %shttps://github.com/stellawills/slowdns%s\n' \
+    "$_c_cyan" "$_c_reset" >&2
+  printf '\n'
 }
 
 detect_public_ip() {
@@ -367,6 +391,8 @@ known = {
     "install_code_used": f"Install code already used. Generate a fresh code at {page_url}.",
     "install_code_expired": f"Install code expired. Generate a fresh code at {page_url}.",
     "install_code_not_found": f"Install code not found. Generate a fresh code at {page_url}.",
+    "install_code_max_activations": f"Install code exceeded max activation attempts. Generate a new code at {page_url}.",
+    "rate_limit_exceeded": "Too many requests from this IP. Wait a while and try again.",
     "validation_error": message or "Install code was invalid.",
     "token_invalid": "Activation token was rejected by the license server.",
     "token_mismatch": "Activation confirmation did not match the issued token.",
@@ -513,6 +539,9 @@ license_activate() {
   # The user is prompted for their real config values after the code is verified.
   act_hostname="$(trim "$(detect_hostname)")"
   act_public_ip="$(trim "$(detect_public_ip)")"
+  if [[ -z "$act_public_ip" ]]; then
+    printf '%sWarning: Could not auto-detect public IP. Proceeding with empty IP in activation binding.%s\n' "$_c_yellow" "$_c_reset" >&2
+  fi
 
   while true; do
     license_prompt_key
@@ -549,7 +578,7 @@ PY
       fi
       if [[ -t 0 ]]; then
         case "$LICENSE_LAST_ERROR_CODE" in
-          install_code_used|install_code_expired|install_code_not_found|validation_error|network_error)
+          install_code_used|install_code_expired|install_code_not_found|validation_error|install_code_max_activations|network_error)
             printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
             INSTALL_CODE=""
             continue
@@ -1044,6 +1073,7 @@ main() {
   require_root
   validate_license_settings
   install_packages
+  check_installer_version
   license_activate
   resolve_install_values
   printf '%sPreparing SlowDNS files...%s\n' "$_c_muted" "$_c_reset"
