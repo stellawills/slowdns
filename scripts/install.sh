@@ -335,26 +335,22 @@ detect_ssh_fingerprint() {
 
 license_error_message() {
   local page_url="${1:-}"
-  python3 - "$page_url" <<'PY'
-import json
-import sys
-
+  # python3 -c keeps stdin free for sys.stdin.read() to receive the here-string body.
+  python3 -c '
+import json, sys
 page_url = sys.argv[1]
 raw = sys.stdin.read().strip()
 if not raw:
     print("SlowDNS activation failed.")
     raise SystemExit(0)
-
 try:
     data = json.loads(raw)
 except Exception:
     print("SlowDNS activation failed.")
     raise SystemExit(0)
-
 error = data.get("error") or {}
 code = str(error.get("code") or "").strip()
 message = str(error.get("message") or "").strip()
-
 known = {
     "install_code_used": f"Install code already used. Generate a fresh code at {page_url}.",
     "install_code_expired": f"Install code expired. Generate a fresh code at {page_url}.",
@@ -364,21 +360,19 @@ known = {
     "token_mismatch": "Activation confirmation did not match the issued token.",
     "activation_not_found": "Activation session was not found on the license server.",
 }
-
 if code in known:
     print(known[code])
 elif message:
     print(message)
 else:
     print("SlowDNS activation failed.")
-PY
+' "$page_url"
 }
 
 license_error_code() {
-  python3 - <<'PY'
-import json
-import sys
-
+  # python3 -c keeps stdin free for sys.stdin.read() to receive the here-string body.
+  python3 -c '
+import json, sys
 raw = sys.stdin.read().strip()
 if not raw:
     raise SystemExit(1)
@@ -391,7 +385,7 @@ code = str(error.get("code") or "").strip()
 if not code:
     raise SystemExit(1)
 print(code)
-PY
+'
 }
 
 show_license_banner() {
@@ -425,10 +419,9 @@ license_prompt_key() {
 
 json_query() {
   local path="$1"
-  python3 - "$path" <<'PY'
-import json
-import sys
-
+  # python3 -c keeps stdin free for sys.stdin.read() to receive the piped response.
+  python3 -c '
+import json, sys
 path = sys.argv[1]
 raw = sys.stdin.read()
 if not raw.strip():
@@ -449,7 +442,7 @@ elif isinstance(value, (dict, list)):
     print(json.dumps(value, separators=(",", ":")))
 else:
     print(value)
-PY
+' "$path"
 }
 
 license_post_json() {
