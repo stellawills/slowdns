@@ -41,6 +41,18 @@ LICENSE_LAST_HTTP_STATUS=""
 LICENSE_LAST_ERROR_CODE=""
 LICENSE_LAST_ERROR_MESSAGE=""
 
+# ANSI color codes — cleared automatically when stdout is not a terminal
+_c_reset=$'\033[0m'
+_c_bold=$'\033[1m'
+_c_green=$'\033[38;5;114m'
+_c_yellow=$'\033[38;5;220m'
+_c_cyan=$'\033[38;5;116m'
+_c_red=$'\033[38;5;210m'
+_c_muted=$'\033[38;5;243m'
+if [[ ! -t 1 ]]; then
+  _c_reset='' _c_bold='' _c_green='' _c_yellow='' _c_cyan='' _c_red='' _c_muted=''
+fi
+
 trim() {
   local value="${1:-}"
   value="${value#"${value%%[![:space:]]*}"}"
@@ -57,9 +69,9 @@ print_section() {
   if [[ -z "$title" ]]; then
     return 0
   fi
-  printf '\n============================================================\n'
-  printf ' %s\n' "$title"
-  printf '============================================================\n'
+  printf '\n%s============================================================%s\n' "$_c_bold" "$_c_reset"
+  printf '%s %s%s\n' "$_c_bold" "$title" "$_c_reset"
+  printf '%s============================================================%s\n' "$_c_bold" "$_c_reset"
 }
 
 is_true() {
@@ -394,8 +406,8 @@ show_license_banner() {
   fi
   LICENSE_BANNER_SHOWN="true"
   print_section "SlowDNS Install Code"
-  printf ' Generate code at: %s\n' "$LICENSE_PAGE_URL"
-  printf ' This code is single-use and expires quickly.\n\n'
+  printf ' Generate code at: %s%s%s\n' "$_c_cyan" "$LICENSE_PAGE_URL" "$_c_reset"
+  printf ' %sThis code is single-use and expires quickly.%s\n\n' "$_c_muted" "$_c_reset"
 }
 
 license_prompt_key() {
@@ -405,7 +417,7 @@ license_prompt_key() {
   if [[ -n "$INSTALL_CODE" ]]; then
     if [[ -n "${SLOWDNS_INSTALL_CODE:-${SLOWDNS_LICENSE_KEY:-}}" ]]; then
       show_license_banner
-      printf ' Using install code from environment.\n'
+      printf ' Using install code from environment: %s%s%s\n' "$_c_yellow" "$INSTALL_CODE" "$_c_reset"
     fi
     return 0
   fi
@@ -414,7 +426,14 @@ license_prompt_key() {
     exit 1
   fi
   show_license_banner
-  prompt_required INSTALL_CODE "SlowDNS install code"
+  printf ' Enter install code: '
+  local _ic_reply=""
+  while [[ -z "$_ic_reply" ]]; do
+    read -r _ic_reply
+    _ic_reply="$(trim "$_ic_reply")"
+    [[ -z "$_ic_reply" ]] && printf ' %sA value is required.%s Enter install code: ' "$_c_red" "$_c_reset"
+  done
+  INSTALL_CODE="$_ic_reply"
 }
 
 json_query() {
@@ -481,7 +500,7 @@ license_post_json() {
 }
 
 license_activate() {
-  local machine_id ssh_fingerprint payload response _resp_tmp _resp_rc
+  local machine_id ssh_fingerprint act_hostname act_public_ip payload response _resp_tmp _resp_rc
 
   if ! license_requested; then
     return 0
@@ -490,11 +509,16 @@ license_activate() {
   machine_id="$(detect_machine_id)"
   ssh_fingerprint="$(detect_ssh_fingerprint)"
 
+  # Auto-detect hostname and IP for the activation binding.
+  # The user is prompted for their real config values after the code is verified.
+  act_hostname="$(trim "$(detect_hostname)")"
+  act_public_ip="$(trim "$(detect_public_ip)")"
+
   while true; do
     license_prompt_key
-    printf 'Validating install code...\n'
+    printf '%sValidating install code...%s\n' "$_c_muted" "$_c_reset"
 
-    payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
+    payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$act_hostname" "$act_public_ip" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
 import json
 import sys
 
@@ -519,14 +543,14 @@ PY
     response="$(cat "$_resp_tmp")"
     rm -f "$_resp_tmp"
     if [[ "$_resp_rc" -ne 0 ]]; then
-      [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] && echo "$LICENSE_LAST_ERROR_MESSAGE" >&2
+      printf '%s%s%s\n' "$_c_red" "${LICENSE_LAST_ERROR_MESSAGE:-SlowDNS activation failed.}" "$_c_reset" >&2
       if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
-        echo "License request failed with HTTP $LICENSE_LAST_HTTP_STATUS." >&2
+        printf '%sHTTP %s%s\n' "$_c_muted" "$LICENSE_LAST_HTTP_STATUS" "$_c_reset" >&2
       fi
       if [[ -t 0 ]]; then
         case "$LICENSE_LAST_ERROR_CODE" in
           install_code_used|install_code_expired|install_code_not_found|validation_error|network_error)
-            echo "Try again with a fresh SlowDNS install code." >&2
+            printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
             INSTALL_CODE=""
             continue
             ;;
@@ -542,19 +566,15 @@ PY
       INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint" 2>/dev/null || true)"
     fi
     if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" ]]; then
-      echo "License server returned an invalid activation response." >&2
-      echo "--- DEBUG: raw server response (first 500 chars) ---" >&2
-      printf '%s' "$response" | head -c 500 >&2
-      echo "" >&2
-      echo "--- END DEBUG ---" >&2
+      printf '%sLicense server returned an invalid activation response.%s\n' "$_c_red" "$_c_reset" >&2
       if [[ -t 0 ]]; then
-        echo "Try again with a fresh SlowDNS install code." >&2
+        printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
         INSTALL_CODE=""
         continue
       fi
       exit 1
     fi
-    printf 'Install code accepted. Continuing setup...\n'
+    printf '%s Install code accepted.%s Continuing setup...\n' "$_c_green" "$_c_reset"
     break
   done
 }
@@ -574,25 +594,23 @@ print(json.dumps({
 }, separators=(",", ":")))
 PY
 )"
-  printf 'Confirming activation...\n'
+  printf '%sConfirming activation...%s\n' "$_c_muted" "$_c_reset"
   _resp_tmp="$(mktemp)"
   _resp_rc=0
   license_post_json "/api/v2/slowdns/install/confirm" "$payload" > "$_resp_tmp" || _resp_rc=$?
   response="$(cat "$_resp_tmp")"
   rm -f "$_resp_tmp"
   if [[ "$_resp_rc" -ne 0 ]]; then
-    [[ -n "$LICENSE_LAST_ERROR_MESSAGE" ]] && echo "$LICENSE_LAST_ERROR_MESSAGE" >&2
-    if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
-      echo "License request failed with HTTP $LICENSE_LAST_HTTP_STATUS." >&2
-    fi
+    printf '%s%s%s\n' "$_c_red" "${LICENSE_LAST_ERROR_MESSAGE:-Activation confirmation failed.}" "$_c_reset" >&2
+    [[ -n "$LICENSE_LAST_HTTP_STATUS" ]] && printf '%sHTTP %s%s\n' "$_c_muted" "$LICENSE_LAST_HTTP_STATUS" "$_c_reset" >&2
     exit 1
   fi
   if ! printf '%s' "$response" | json_query "data.status" >/dev/null 2>&1; then
-    echo "License server returned an invalid confirmation response." >&2
+    printf '%sLicense server returned an invalid confirmation response.%s\n' "$_c_red" "$_c_reset" >&2
     exit 1
   fi
   LICENSE_CONFIRMED="true"
-  printf 'Activation confirmed.\n'
+  printf '%s Activation confirmed.%s\n' "$_c_green" "$_c_reset"
 }
 
 license_release() {
@@ -1026,10 +1044,9 @@ main() {
   require_root
   validate_license_settings
   install_packages
-  license_prompt_key
-  resolve_install_values
   license_activate
-  printf 'Preparing SlowDNS files...\n'
+  resolve_install_values
+  printf '%sPreparing SlowDNS files...%s\n' "$_c_muted" "$_c_reset"
   copy_project
   render_config
   migrate_legacy_state
@@ -1038,20 +1055,24 @@ main() {
   generate_keys
   write_units
   cleanup_legacy_units
-  printf 'Starting SlowDNS services...\n'
+  printf '%sStarting SlowDNS services...%s\n' "$_c_muted" "$_c_reset"
   start_services
   ensure_service_active slowdns-udp53-redirect.service
   ensure_service_active slowdns-api.service
   ensure_service_active slowdns-dnstt.service
   license_confirm
   write_license_metadata
-  echo "slowdns installed under $INSTALL_DIR"
-  echo "api: systemctl status slowdns-api"
-  echo "dnstt: systemctl status slowdns-dnstt"
-  echo "menu: slowdns-menu"
+  printf '\n%s============================================================%s\n' "$_c_green" "$_c_reset"
+  printf '%s SlowDNS installed successfully%s\n' "$_c_green$_c_bold" "$_c_reset"
+  printf '%s============================================================%s\n' "$_c_green" "$_c_reset"
+  printf '  Installed at:  %s\n' "$INSTALL_DIR"
+  printf '  API status:    %ssystemctl status slowdns-api%s\n' "$_c_cyan" "$_c_reset"
+  printf '  dnstt status:  %ssystemctl status slowdns-dnstt%s\n' "$_c_cyan" "$_c_reset"
+  printf '  Menu:          %sslowdns-menu%s\n' "$_c_cyan" "$_c_reset"
   if [[ "$LICENSE_CONFIRMED" == "true" ]]; then
-    echo "install code: ${INSTALL_CODE_HINT} activated via ${LICENSE_URL}"
+    printf '  Install code:  %s%s%s activated via %s\n' "$_c_yellow" "${INSTALL_CODE_HINT}" "$_c_reset" "${LICENSE_URL}"
   fi
+  printf '\n'
 }
 
 main "$@"
