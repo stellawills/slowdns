@@ -34,12 +34,15 @@ LICENSE_METADATA_PATH="$CONFIG_DIR/license.json"
 LICENSE_ACTIVATION_ID=""
 LICENSE_INSTALL_TOKEN=""
 INSTALL_CODE_HINT=""
+LICENSE_PRECHECK_TOKEN=""
 LICENSE_CONFIRMED="false"
 DNSTT_BUILD_TMPDIR=""
 LICENSE_BANNER_SHOWN="false"
 LICENSE_LAST_HTTP_STATUS=""
 LICENSE_LAST_ERROR_CODE=""
 LICENSE_LAST_ERROR_MESSAGE=""
+LICENSE_MACHINE_ID=""
+LICENSE_SSH_FINGERPRINT=""
 
 # ANSI color codes — cleared automatically when stdout is not a terminal
 _c_reset=$'\033[0m'
@@ -198,8 +201,31 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables
+    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables screen
   fi
+}
+
+maybe_reexec_in_screen() {
+  local session_name cmd
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    return 0
+  fi
+  if [[ -n "${SLOWDNS_SCREEN_ATTACHED:-}" || -n "${SCREEN:-}" || -n "${TMUX:-}" ]]; then
+    return 0
+  fi
+  if [[ -z "${SSH_CONNECTION:-}" ]]; then
+    return 0
+  fi
+  if is_true "${SLOWDNS_DISABLE_SCREEN_AUTOSTART:-false}"; then
+    return 0
+  fi
+  command -v screen >/dev/null 2>&1 || return 0
+
+  session_name="slowdns-install"
+  printf '%sLaunching installer inside screen session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
+  printf '%sIf you disconnect, reattach with: screen -r %s%s\n\n' "$_c_muted" "$session_name" "$_c_reset"
+  printf -v cmd 'cd %q && SLOWDNS_SCREEN_ATTACHED=true %q' "$PROJECT_DIR" "$SCRIPT_DIR/install.sh"
+  exec screen -D -RR -S "$session_name" bash -lc "$cmd"
 }
 
 license_requested() {
@@ -394,6 +420,9 @@ known = {
     "install_code_max_activations": f"Install code exceeded max activation attempts. Generate a new code at {page_url}.",
     "rate_limit_exceeded": "Too many requests from this IP. Wait a while and try again.",
     "validation_error": message or "Install code was invalid.",
+    "browser_session_required": f"Open {page_url} first, then request a code from that page before installing.",
+    "browser_session_invalid": f"Your SlowDNS browser session expired. Refresh {page_url} and generate a new code.",
+    "precheck_token_invalid": "Install code validation expired or no longer matches this machine. Re-run validation with a fresh code.",
     "token_invalid": "Activation token was rejected by the license server.",
     "token_mismatch": "Activation confirmation did not match the issued token.",
     "activation_not_found": "Activation session was not found on the license server.",
@@ -525,29 +554,21 @@ license_post_json() {
   printf '%s' "$body"
 }
 
-license_activate() {
-  local machine_id ssh_fingerprint act_hostname act_public_ip payload response _resp_tmp _resp_rc
+license_precheck() {
+  local payload response _resp_tmp _resp_rc
 
   if ! license_requested; then
     return 0
   fi
 
-  machine_id="$(detect_machine_id)"
-  ssh_fingerprint="$(detect_ssh_fingerprint)"
-
-  # Auto-detect hostname and IP for the activation binding.
-  # The user is prompted for their real config values after the code is verified.
-  act_hostname="$(trim "$(detect_hostname)")"
-  act_public_ip="$(trim "$(detect_public_ip)")"
-  if [[ -z "$act_public_ip" ]]; then
-    printf '%sWarning: Could not auto-detect public IP. Proceeding with empty IP in activation binding.%s\n' "$_c_yellow" "$_c_reset" >&2
-  fi
+  LICENSE_MACHINE_ID="$(detect_machine_id)"
+  LICENSE_SSH_FINGERPRINT="$(detect_ssh_fingerprint)"
 
   while true; do
     license_prompt_key
     printf '%sValidating install code...%s\n' "$_c_muted" "$_c_reset"
 
-    payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$act_hostname" "$act_public_ip" "$machine_id" "$ssh_fingerprint" "$INSTALLER_VERSION" <<'PY'
+    payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRODUCT" "$LICENSE_MACHINE_ID" "$LICENSE_SSH_FINGERPRINT" "$INSTALLER_VERSION" <<'PY'
 import json
 import sys
 
@@ -555,17 +576,90 @@ payload = {
     "install_code": sys.argv[1].strip().upper(),
     "license_key": sys.argv[1].strip().upper(),
     "product": sys.argv[2].strip().lower(),
-    "hostname": sys.argv[3].strip().lower(),
-    "public_ip": sys.argv[4].strip(),
-    "machine_id": sys.argv[5].strip(),
-    "ssh_fingerprint": sys.argv[6].strip(),
-    "requested_ref": "main",
-    "installer_version": sys.argv[7].strip(),
+    "machine_id": sys.argv[3].strip(),
+    "ssh_fingerprint": sys.argv[4].strip(),
+    "installer_version": sys.argv[5].strip(),
 }
 print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 
+    _resp_tmp="$(mktemp)"
+    _resp_rc=0
+    license_post_json "/api/v2/slowdns/install/precheck" "$payload" > "$_resp_tmp" || _resp_rc=$?
+    response="$(cat "$_resp_tmp")"
+    rm -f "$_resp_tmp"
+    if [[ "$_resp_rc" -ne 0 ]]; then
+      printf '%s%s%s\n' "$_c_red" "${LICENSE_LAST_ERROR_MESSAGE:-SlowDNS precheck failed.}" "$_c_reset" >&2
+      if [[ -n "$LICENSE_LAST_HTTP_STATUS" ]]; then
+        printf '%sHTTP %s%s\n' "$_c_muted" "$LICENSE_LAST_HTTP_STATUS" "$_c_reset" >&2
+      fi
+      if [[ -t 0 ]]; then
+        case "$LICENSE_LAST_ERROR_CODE" in
+          install_code_used|install_code_expired|install_code_not_found|validation_error|install_code_max_activations|network_error|browser_session_required|browser_session_invalid)
+            printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
+            INSTALL_CODE=""
+            continue
+            ;;
+        esac
+      fi
+      exit 1
+    fi
+
+    LICENSE_PRECHECK_TOKEN="$(printf '%s' "$response" | json_query "data.precheck_token" 2>/dev/null || true)"
+    INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code_hint" 2>/dev/null || true)"
+    if [[ -z "$INSTALL_CODE_HINT" ]]; then
+      INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code" 2>/dev/null || true)"
+    fi
+    if [[ -z "$LICENSE_PRECHECK_TOKEN" ]]; then
+      printf '%sLicense server returned an invalid precheck response.%s\n' "$_c_red" "$_c_reset" >&2
+      if [[ -t 0 ]]; then
+        printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
+        INSTALL_CODE=""
+        continue
+      fi
+      exit 1
+    fi
+
+    printf '%s Install code accepted.%s Continue with the SlowDNS host prompts.\n' "$_c_green" "$_c_reset"
+    break
+  done
+}
+
+license_activate() {
+  local payload response _resp_tmp _resp_rc
+
+  if ! license_requested; then
+    return 0
+  fi
+
+  while true; do
+    if [[ -z "$LICENSE_PRECHECK_TOKEN" ]]; then
+      echo "license precheck token missing" >&2
+      exit 1
+    fi
+
+    payload="$(python3 - "$INSTALL_CODE" "$LICENSE_PRECHECK_TOKEN" "$LICENSE_PRODUCT" "$CONFIG_HOSTNAME" "$CONFIG_PUBLIC_IP" "$LICENSE_MACHINE_ID" "$LICENSE_SSH_FINGERPRINT" "$INSTALLER_VERSION" <<'PY'
+import json
+import sys
+
+payload = {
+    "install_code": sys.argv[1].strip().upper(),
+    "license_key": sys.argv[1].strip().upper(),
+    "precheck_token": sys.argv[2].strip(),
+    "product": sys.argv[3].strip().lower(),
+    "hostname": sys.argv[4].strip().lower(),
+    "public_ip": sys.argv[5].strip(),
+    "machine_id": sys.argv[6].strip(),
+    "ssh_fingerprint": sys.argv[7].strip(),
+    "requested_ref": "main",
+    "installer_version": sys.argv[8].strip(),
+}
+print(json.dumps(payload, separators=(",", ":")))
+PY
+)"
+
+    printf '%sBinding activation to the selected host and IP...%s\n' "$_c_muted" "$_c_reset"
     _resp_tmp="$(mktemp)"
     _resp_rc=0
     license_post_json "/api/v2/slowdns/install/activate" "$payload" > "$_resp_tmp" || _resp_rc=$?
@@ -578,9 +672,12 @@ PY
       fi
       if [[ -t 0 ]]; then
         case "$LICENSE_LAST_ERROR_CODE" in
-          install_code_used|install_code_expired|install_code_not_found|validation_error|install_code_max_activations|network_error)
-            printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
+          precheck_token_invalid|install_code_used|install_code_expired|install_code_not_found|install_code_max_activations|validation_error)
+            printf '%sRe-validating the install code before activation...%s\n' "$_c_muted" "$_c_reset" >&2
+            LICENSE_PRECHECK_TOKEN=""
             INSTALL_CODE=""
+            INSTALL_CODE_HINT=""
+            license_precheck
             continue
             ;;
         esac
@@ -590,20 +687,10 @@ PY
 
     LICENSE_ACTIVATION_ID="$(printf '%s' "$response" | json_query "data.activation_id" 2>/dev/null || true)"
     LICENSE_INSTALL_TOKEN="$(printf '%s' "$response" | json_query "data.install_token" 2>/dev/null || true)"
-    INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.install_code" 2>/dev/null || true)"
-    if [[ -z "$INSTALL_CODE_HINT" ]]; then
-      INSTALL_CODE_HINT="$(printf '%s' "$response" | json_query "data.license.license_key_hint" 2>/dev/null || true)"
-    fi
     if [[ -z "$LICENSE_ACTIVATION_ID" || -z "$LICENSE_INSTALL_TOKEN" ]]; then
       printf '%sLicense server returned an invalid activation response.%s\n' "$_c_red" "$_c_reset" >&2
-      if [[ -t 0 ]]; then
-        printf '%sTry again with a fresh install code from %s%s\n' "$_c_muted" "$LICENSE_PAGE_URL" "$_c_reset" >&2
-        INSTALL_CODE=""
-        continue
-      fi
       exit 1
     fi
-    printf '%s Install code accepted.%s Continuing setup...\n' "$_c_green" "$_c_reset"
     break
   done
 }
@@ -1073,9 +1160,11 @@ main() {
   require_root
   validate_license_settings
   install_packages
+  maybe_reexec_in_screen
   check_installer_version
-  license_activate
+  license_precheck
   resolve_install_values
+  license_activate
   printf '%sPreparing SlowDNS files...%s\n' "$_c_muted" "$_c_reset"
   copy_project
   render_config

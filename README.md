@@ -1,6 +1,6 @@
 # SlowDNS
 
-Standalone SlowDNS (SSH over DNS) service that stays API-compatible with the existing IPTunnel SSH account flow, but does not use token-based installation or token-gated API access.
+Standalone SlowDNS (SSH over DNS) service that stays API-compatible with the existing IPTunnel SSH account flow, while using a machine-bound install-code activation step and keeping the runtime account API token-free.
 
 Install target on Linux:
 
@@ -54,8 +54,9 @@ Notes:
 - Installation requires a short-lived public `IPT-SD-...` install code from `https://license.internetshub.com/slowdns`.
 - API access is also token-free by design.
 - Install-code activation is enabled by default against your private backend at `https://license.internetshub.com`.
-- Installer prompts for the VPS domain and public IPv4, similar to the main IPTunnel install flow.
-- Installer prompts for the public hostname and delegated SlowDNS tunnel domain, then automatically uses the public hostname as the NS target host.
+- Installer validates the install code first, then prompts for the public hostname, delegated SlowDNS tunnel domain, and public IPv4.
+- Installer automatically uses the public hostname as the NS target host unless `SLOWDNS_NS_HOST` is explicitly set.
+- On SSH sessions with `screen` available, the installer re-launches itself in `screen -S slowdns-install` so it can survive a dropped connection.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
 - Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns/toolchain/` when the VPS has an outdated system Go.
 - When the daemon must bind an internal high port like `5300`, the installer can still expose standard UDP `53` externally via an automatic redirect service.
