@@ -256,9 +256,8 @@ function slowdns_find_activation(string $activation_id): ?array {
 }
 
 function v2_slowdns_issue_code(): never {
-    // 10 code requests per IP per hour — generous enough for legitimate use,
-    // tight enough to prevent automated enumeration.
-    slowdns_rate_limit('issue_code', 10, 3600);
+    // 5 code requests per IP per hour.
+    slowdns_rate_limit('issue_code', 5, 3600);
     slowdns_rate_limit_cleanup(3600);
     slowdns_cleanup_codes();
 
