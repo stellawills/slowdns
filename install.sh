@@ -4,6 +4,7 @@ set -euo pipefail
 BOOTSTRAP_REPO_URL="https://github.com/stellawills/slowdns.git"
 BOOTSTRAP_REF="main"
 BOOTSTRAP_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/stellawills/slowdns/${BOOTSTRAP_REF}/scripts/install.sh"
+BOOTSTRAP_ARCHIVE_URL="https://codeload.github.com/stellawills/slowdns/tar.gz/refs/heads/${BOOTSTRAP_REF}"
 BOOTSTRAP_INSTALL_SCRIPT_SHA256="75252bf9de66767549a787bc658435b66cca746c76b6c1d6db66d79513ed1a14"
 BOOTSTRAP_TMPDIR=""
 
@@ -41,22 +42,26 @@ run_local_install() {
 }
 
 bootstrap_install() {
-  local installer_path srcdir actual_hash
+  local installer_path archive_path srcdir actual_hash
   BOOTSTRAP_TMPDIR="$(mktemp -d)"
-  installer_path="$BOOTSTRAP_TMPDIR/install.sh"
-  trap cleanup_bootstrap EXIT
 
   if command -v curl >/dev/null 2>&1; then
-    curl -4fsSL "$BOOTSTRAP_INSTALL_SCRIPT_URL" -o "$installer_path"
-    actual_hash="$(sha256_file "$installer_path")"
+    archive_path="$BOOTSTRAP_TMPDIR/slowdns.tar.gz"
+    curl -4fsSL "$BOOTSTRAP_ARCHIVE_URL" -o "$archive_path"
+    tar -xzf "$archive_path" -C "$BOOTSTRAP_TMPDIR"
+    srcdir="$(find "$BOOTSTRAP_TMPDIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+    if [[ -z "${srcdir:-}" || ! -f "$srcdir/scripts/install.sh" ]]; then
+      echo "Unable to prepare installer source tree from GitHub archive." >&2
+      exit 1
+    fi
+    actual_hash="$(sha256_file "$srcdir/scripts/install.sh")"
     if [[ "$actual_hash" != "$BOOTSTRAP_INSTALL_SCRIPT_SHA256" ]]; then
       echo "Refusing to run bootstrap installer: checksum verification failed." >&2
       echo "expected: $BOOTSTRAP_INSTALL_SCRIPT_SHA256" >&2
       echo "actual:   $actual_hash" >&2
       exit 1
     fi
-    bash "$installer_path" "$@"
-    return $?
+    exec bash "$srcdir/scripts/install.sh" "$@"
   fi
 
   if command -v git >/dev/null 2>&1; then
@@ -69,8 +74,7 @@ bootstrap_install() {
       echo "actual:   $actual_hash" >&2
       exit 1
     fi
-    bash "$srcdir/scripts/install.sh" "$@"
-    return $?
+    exec bash "$srcdir/scripts/install.sh" "$@"
   fi
 
   echo "Unable to bootstrap installer. Install curl or git, then retry." >&2
