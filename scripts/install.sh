@@ -242,7 +242,7 @@ install_packages() {
 }
 
 maybe_reexec_in_screen() {
-  local session_name cmd
+  local session_name cmd quoted_args=""
   if [[ ! -t 0 || ! -t 1 ]]; then
     return 0
   fi
@@ -260,7 +260,10 @@ maybe_reexec_in_screen() {
   session_name="slowdns-install"
   printf '%sLaunching installer inside screen session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
   printf '%sIf you disconnect, reattach with: screen -r %s%s\n\n' "$_c_muted" "$session_name" "$_c_reset"
-  printf -v cmd 'cd %q && SLOWDNS_SCREEN_ATTACHED=true %q' "$PROJECT_DIR" "$SCRIPT_DIR/install.sh"
+  if [[ "$#" -gt 0 ]]; then
+    printf -v quoted_args ' %q' "$@"
+  fi
+  printf -v cmd 'cd %q && SLOWDNS_SCREEN_ATTACHED=true bash %q%s' "$PROJECT_DIR" "$SCRIPT_DIR/install.sh" "$quoted_args"
   exec screen -D -RR -S "$session_name" bash -lc "$cmd"
 }
 
@@ -1215,7 +1218,7 @@ main() {
   require_root
   validate_license_settings
   install_packages
-  maybe_reexec_in_screen
+  maybe_reexec_in_screen "$@"
   check_installer_version
   license_precheck
   resolve_install_values
