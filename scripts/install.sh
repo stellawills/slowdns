@@ -285,23 +285,25 @@ maybe_reexec_in_screen() {
   if [[ "$#" -gt 0 ]]; then
     printf -v quoted_args ' %q' "$@"
   fi
+  rm -f "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH"
+  : > "$SCREEN_LOG_PATH"
   printf -v env_exports 'SLOWDNS_SCREEN_WORKER=true SLOWDNS_INSTALL_CODE=%q SLOWDNS_INSTALL_CODE_HINT=%q SLOWDNS_PRECHECK_TOKEN=%q SLOWDNS_MACHINE_ID=%q SLOWDNS_SSH_FINGERPRINT=%q SLOWDNS_HOSTNAME=%q SLOWDNS_TUNNEL_DOMAIN=%q SLOWDNS_PUBLIC_IP=%q SLOWDNS_NS_HOST=%q SCREEN_LOG_PATH=%q SCREEN_STATUS_PATH=%q' \
     "$INSTALL_CODE" "$INSTALL_CODE_HINT" "$LICENSE_PRECHECK_TOKEN" "$LICENSE_MACHINE_ID" "$LICENSE_SSH_FINGERPRINT" "$CONFIG_HOSTNAME" "$CONFIG_TUNNEL_DOMAIN" "$CONFIG_PUBLIC_IP" "$CONFIG_NS_HOST" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH"
-  printf -v screen_cmd 'cd %q && rm -f %q %q && touch %q && %s bash %q%s > %q 2>&1; status=$?; printf "%%s\n" "$status" > %q; exit "$status"' \
-    "$PROJECT_DIR" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH" "$SCREEN_LOG_PATH" "$env_exports" "$self_script" "$quoted_args" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH"
+  printf -v screen_cmd 'cd %q && %s bash %q%s > %q 2>&1; status=$?; printf "%%s\n" "$status" > %q; exit "$status"' \
+    "$PROJECT_DIR" "$env_exports" "$self_script" "$quoted_args" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH"
   screen -wipe >/dev/null 2>&1 || true
   screen -S "$session_name" -X quit >/dev/null 2>&1 || true
   screen -dmS "$session_name" bash -lc "$screen_cmd"
 
   if command -v tail >/dev/null 2>&1; then
-    tail -n +1 -f "$SCREEN_LOG_PATH" &
+    tail -n +1 -F "$SCREEN_LOG_PATH" &
     local tail_pid=$!
     while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
       sleep 1
     done
+    sleep 1
     kill "$tail_pid" >/dev/null 2>&1 || true
     wait "$tail_pid" 2>/dev/null || true
-    cat "$SCREEN_LOG_PATH"
   else
     while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
       sleep 1
@@ -311,7 +313,12 @@ maybe_reexec_in_screen() {
 
   local status="1"
   status="$(tr -d '[:space:]' < "$SCREEN_STATUS_PATH" 2>/dev/null || printf '1')"
-  printf '\n%sBackground install finished with exit status %s.%s\n' "$_c_bold" "$status" "$_c_reset"
+  if [[ "$status" == "0" ]]; then
+    printf '\n%sSlowDNS install completed successfully.%s\n' "$_c_green" "$_c_reset"
+  else
+    printf '\n%sSlowDNS install failed with exit status %s.%s\n' "$_c_red" "$status" "$_c_reset" >&2
+    printf '%sReview the log at %s or reattach with: screen -r %s%s\n' "$_c_muted" "$SCREEN_LOG_PATH" "$session_name" "$_c_reset" >&2
+  fi
   exit "$status"
 }
 
