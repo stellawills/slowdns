@@ -260,8 +260,7 @@ maybe_reexec_in_screen() {
   command -v screen >/dev/null 2>&1 || return 0
 
   local session_name="slowdns-install"
-  printf '%sRunning the long install phase in background session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
-  printf '%sYou will stay in this shell and see the log stream here.%s\n' "$_c_muted" "$_c_reset"
+  printf '%sStarting SlowDNS installation in background session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
   printf '%sIf you disconnect, reattach with: screen -r %s%s\n\n' "$_c_muted" "$session_name" "$_c_reset"
 
   # When run via bash <(curl ...) directly, BASH_SOURCE[0] is a fd path like
@@ -295,19 +294,17 @@ maybe_reexec_in_screen() {
   screen -S "$session_name" -X quit >/dev/null 2>&1 || true
   screen -dmS "$session_name" bash -lc "$screen_cmd"
 
-  if command -v tail >/dev/null 2>&1; then
-    tail -n +1 -F "$SCREEN_LOG_PATH" &
-    local tail_pid=$!
-    while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
-      sleep 1
-    done
+  local -a spinner=('|' '/' '-' '\\')
+  local spinner_index=0
+  while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
+    printf '\r%sInstalling SlowDNS in background... %s%s' "$_c_muted" "${spinner[$spinner_index]}" "$_c_reset"
+    spinner_index=$(( (spinner_index + 1) % 4 ))
     sleep 1
-    kill "$tail_pid" >/dev/null 2>&1 || true
-    wait "$tail_pid" 2>/dev/null || true
-  else
-    while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
-      sleep 1
-    done
+  done
+  printf '\r%sInstalling SlowDNS in background... done.%s\n' "$_c_muted" "$_c_reset"
+
+  if [[ -s "$SCREEN_LOG_PATH" ]]; then
+    printf '\n'
     cat "$SCREEN_LOG_PATH"
   fi
 
@@ -417,7 +414,9 @@ resolve_install_values() {
     fi
   fi
 
-  if [[ -t 0 ]]; then
+  if [[ -n "${SLOWDNS_HOSTNAME:-}" ]]; then
+    CONFIG_HOSTNAME="$(trim "$SLOWDNS_HOSTNAME")"
+  elif [[ -t 0 ]]; then
     prompt_required CONFIG_HOSTNAME "SlowDNS public hostname (A record host)" "$host_default"
   else
     if [[ -z "$host_default" ]]; then
@@ -431,7 +430,9 @@ resolve_install_values() {
   if [[ -z "$tunnel_default" ]]; then
     tunnel_default="$(derive_sibling_host "$CONFIG_HOSTNAME" "slowdns")"
   fi
-  if [[ -t 0 ]]; then
+  if [[ -n "${SLOWDNS_TUNNEL_DOMAIN:-}" ]]; then
+    CONFIG_TUNNEL_DOMAIN="$(trim "$SLOWDNS_TUNNEL_DOMAIN")"
+  elif [[ -t 0 ]]; then
     prompt_required CONFIG_TUNNEL_DOMAIN "SlowDNS delegated tunnel domain" "$tunnel_default"
   else
     CONFIG_TUNNEL_DOMAIN="$tunnel_default"
@@ -448,7 +449,11 @@ resolve_install_values() {
   if [[ -z "$ip_default" ]]; then
     ip_default="$detected_ip"
   fi
-  prompt_public_ip "$ip_default"
+  if [[ -n "${SLOWDNS_PUBLIC_IP:-}" ]]; then
+    CONFIG_PUBLIC_IP="$(trim "$SLOWDNS_PUBLIC_IP")"
+  else
+    prompt_public_ip "$ip_default"
+  fi
 }
 
 detect_machine_id() {
