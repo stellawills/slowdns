@@ -37,16 +37,18 @@ GO_CMD=""
 LICENSE_METADATA_PATH="$CONFIG_DIR/license.json"
 LICENSE_ACTIVATION_ID=""
 LICENSE_INSTALL_TOKEN=""
-INSTALL_CODE_HINT=""
-LICENSE_PRECHECK_TOKEN=""
+INSTALL_CODE_HINT="${SLOWDNS_INSTALL_CODE_HINT:-}"
+LICENSE_PRECHECK_TOKEN="${SLOWDNS_PRECHECK_TOKEN:-}"
 LICENSE_CONFIRMED="false"
 DNSTT_BUILD_TMPDIR=""
 LICENSE_BANNER_SHOWN="false"
 LICENSE_LAST_HTTP_STATUS=""
 LICENSE_LAST_ERROR_CODE=""
 LICENSE_LAST_ERROR_MESSAGE=""
-LICENSE_MACHINE_ID=""
-LICENSE_SSH_FINGERPRINT=""
+LICENSE_MACHINE_ID="${SLOWDNS_MACHINE_ID:-}"
+LICENSE_SSH_FINGERPRINT="${SLOWDNS_SSH_FINGERPRINT:-}"
+SCREEN_LOG_PATH="/tmp/slowdns-install.log"
+SCREEN_STATUS_PATH="/tmp/slowdns-install.status"
 
 # ANSI color codes — cleared automatically when stdout is not a terminal
 _c_reset=$'\033[0m'
@@ -242,11 +244,11 @@ install_packages() {
 }
 
 maybe_reexec_in_screen() {
-  local quoted_args=""
+  local quoted_args="" screen_cmd="" env_exports=""
   if [[ ! -t 0 || ! -t 1 ]]; then
     return 0
   fi
-  if [[ -n "${SLOWDNS_SCREEN_ATTACHED:-}" || -n "${SCREEN:-}" || -n "${TMUX:-}" ]]; then
+  if [[ -n "${SLOWDNS_SCREEN_WORKER:-}" || -n "${SCREEN:-}" || -n "${TMUX:-}" ]]; then
     return 0
   fi
   if [[ -z "${SSH_CONNECTION:-}" ]]; then
@@ -258,13 +260,9 @@ maybe_reexec_in_screen() {
   command -v screen >/dev/null 2>&1 || return 0
 
   local session_name="slowdns-install"
-  printf '%sLaunching installer inside screen session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
+  printf '%sRunning the long install phase in background session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
+  printf '%sYou will stay in this shell and see the log stream here.%s\n' "$_c_muted" "$_c_reset"
   printf '%sIf you disconnect, reattach with: screen -r %s%s\n\n' "$_c_muted" "$session_name" "$_c_reset"
-
-  # Export so screen and the re-exec'd script both inherit them — no shell
-  # wrapper needed, variables flow straight through the environment.
-  export SLOWDNS_SCREEN_ATTACHED=true
-  [[ -n "${INSTALL_CODE:-}" ]] && export SLOWDNS_INSTALL_CODE="$INSTALL_CODE"
 
   # When run via bash <(curl ...) directly, BASH_SOURCE[0] is a fd path like
   # /dev/fd/63 — not a real file. When run via the bootstrap wrapper, it is
@@ -287,9 +285,34 @@ maybe_reexec_in_screen() {
   if [[ "$#" -gt 0 ]]; then
     printf -v quoted_args ' %q' "$@"
   fi
-  local screen_cmd=""
-  printf -v screen_cmd 'SLOWDNS_SCREEN_ATTACHED=true bash %q%s; status=$?; printf "\n%s\n" "SlowDNS installer finished with exit status ${status}."; printf "%s" "Press Enter to close this screen session (auto-close in 20 seconds)..."; read -r -t 20 _ || true; exit "$status"' "$self_script" "$quoted_args"
-  exec screen -D -RR -S "$session_name" bash -lc "$screen_cmd"
+  printf -v env_exports 'SLOWDNS_SCREEN_WORKER=true SLOWDNS_INSTALL_CODE=%q SLOWDNS_INSTALL_CODE_HINT=%q SLOWDNS_PRECHECK_TOKEN=%q SLOWDNS_MACHINE_ID=%q SLOWDNS_SSH_FINGERPRINT=%q SLOWDNS_HOSTNAME=%q SLOWDNS_TUNNEL_DOMAIN=%q SLOWDNS_PUBLIC_IP=%q SLOWDNS_NS_HOST=%q SCREEN_LOG_PATH=%q SCREEN_STATUS_PATH=%q' \
+    "$INSTALL_CODE" "$INSTALL_CODE_HINT" "$LICENSE_PRECHECK_TOKEN" "$LICENSE_MACHINE_ID" "$LICENSE_SSH_FINGERPRINT" "$CONFIG_HOSTNAME" "$CONFIG_TUNNEL_DOMAIN" "$CONFIG_PUBLIC_IP" "$CONFIG_NS_HOST" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH"
+  printf -v screen_cmd 'cd %q && rm -f %q %q && touch %q && %s bash %q%s > %q 2>&1; status=$?; printf "%%s\n" "$status" > %q; exit "$status"' \
+    "$PROJECT_DIR" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH" "$SCREEN_LOG_PATH" "$env_exports" "$self_script" "$quoted_args" "$SCREEN_LOG_PATH" "$SCREEN_STATUS_PATH"
+  screen -wipe >/dev/null 2>&1 || true
+  screen -S "$session_name" -X quit >/dev/null 2>&1 || true
+  screen -dmS "$session_name" bash -lc "$screen_cmd"
+
+  if command -v tail >/dev/null 2>&1; then
+    tail -n +1 -f "$SCREEN_LOG_PATH" &
+    local tail_pid=$!
+    while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
+      sleep 1
+    done
+    kill "$tail_pid" >/dev/null 2>&1 || true
+    wait "$tail_pid" 2>/dev/null || true
+    cat "$SCREEN_LOG_PATH"
+  else
+    while [[ ! -f "$SCREEN_STATUS_PATH" ]]; do
+      sleep 1
+    done
+    cat "$SCREEN_LOG_PATH"
+  fi
+
+  local status="1"
+  status="$(tr -d '[:space:]' < "$SCREEN_STATUS_PATH" 2>/dev/null || printf '1')"
+  printf '\n%sBackground install finished with exit status %s.%s\n' "$_c_bold" "$status" "$_c_reset"
+  exit "$status"
 }
 
 license_requested() {
@@ -623,8 +646,11 @@ license_precheck() {
     return 0
   fi
 
-  LICENSE_MACHINE_ID="$(detect_machine_id)"
-  LICENSE_SSH_FINGERPRINT="$(detect_ssh_fingerprint)"
+  [[ -n "$LICENSE_MACHINE_ID" ]] || LICENSE_MACHINE_ID="$(detect_machine_id)"
+  [[ -n "$LICENSE_SSH_FINGERPRINT" ]] || LICENSE_SSH_FINGERPRINT="$(detect_ssh_fingerprint)"
+  if [[ -n "$LICENSE_PRECHECK_TOKEN" ]]; then
+    return 0
+  fi
 
   while true; do
     license_prompt_key
@@ -1243,10 +1269,10 @@ main() {
   require_root
   validate_license_settings
   install_packages
-  maybe_reexec_in_screen "$@"
   check_installer_version
   license_precheck
   resolve_install_values
+  maybe_reexec_in_screen "$@"
   license_activate
   printf '%sPreparing SlowDNS files...%s\n' "$_c_muted" "$_c_reset"
   copy_project
