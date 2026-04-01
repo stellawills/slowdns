@@ -242,6 +242,7 @@ install_packages() {
 }
 
 maybe_reexec_in_screen() {
+  local quoted_args=""
   if [[ ! -t 0 || ! -t 1 ]]; then
     return 0
   fi
@@ -283,7 +284,12 @@ maybe_reexec_in_screen() {
     chmod 700 "$self_script"
   fi
 
-  exec screen -D -RR -S "$session_name" bash "$self_script" "$@"
+  if [[ "$#" -gt 0 ]]; then
+    printf -v quoted_args ' %q' "$@"
+  fi
+  local screen_cmd=""
+  printf -v screen_cmd 'SLOWDNS_SCREEN_ATTACHED=true bash %q%s; status=$?; printf "\n%s\n" "SlowDNS installer finished with exit status ${status}."; printf "%s" "Press Enter to close this screen session (auto-close in 20 seconds)..."; read -r -t 20 _ || true; exit "$status"' "$self_script" "$quoted_args"
+  exec screen -D -RR -S "$session_name" bash -lc "$screen_cmd"
 }
 
 license_requested() {
