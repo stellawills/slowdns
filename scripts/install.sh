@@ -242,7 +242,6 @@ install_packages() {
 }
 
 maybe_reexec_in_screen() {
-  local session_name cmd quoted_args=""
   if [[ ! -t 0 || ! -t 1 ]]; then
     return 0
   fi
@@ -257,36 +256,34 @@ maybe_reexec_in_screen() {
   fi
   command -v screen >/dev/null 2>&1 || return 0
 
-  session_name="slowdns-install"
+  local session_name="slowdns-install"
   printf '%sLaunching installer inside screen session %s so it can survive SSH drops.%s\n' "$_c_muted" "$session_name" "$_c_reset"
   printf '%sIf you disconnect, reattach with: screen -r %s%s\n\n' "$_c_muted" "$session_name" "$_c_reset"
-  if [[ "$#" -gt 0 ]]; then
-    printf -v quoted_args ' %q' "$@"
-  fi
 
-  # Explicitly carry the install code so the screen session doesn't prompt again
-  # if the user pre-set it. Other inherited env vars pass through automatically.
-  local env_prefix="SLOWDNS_SCREEN_ATTACHED=true"
-  [[ -n "${INSTALL_CODE:-}" ]] && env_prefix+=" SLOWDNS_INSTALL_CODE=$(printf '%q' "$INSTALL_CODE")"
+  # Export so screen and the re-exec'd script both inherit them — no shell
+  # wrapper needed, variables flow straight through the environment.
+  export SLOWDNS_SCREEN_ATTACHED=true
+  [[ -n "${INSTALL_CODE:-}" ]] && export SLOWDNS_INSTALL_CODE="$INSTALL_CODE"
 
-  # When run via bash <(curl ...) directly, BASH_SOURCE[0] is a file-descriptor
-  # path like /dev/fd/63 — not a real file. When run through the bootstrap
-  # wrapper (root install.sh), BASH_SOURCE[0] is the real tmpdir path.
-  # Fall back to re-downloading scripts/install.sh from GitHub if no real file
-  # is available, to avoid screen starting and immediately failing.
+  # When run via bash <(curl ...) directly, BASH_SOURCE[0] is a fd path like
+  # /dev/fd/63 — not a real file. When run via the bootstrap wrapper, it is
+  # the real on-disk tmpdir path. Download to a temp file as a fallback so
+  # screen always receives a concrete script path rather than a shell command.
   local self_script=""
   if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
     self_script="${BASH_SOURCE[0]}"
-  fi
-
-  if [[ -n "$self_script" ]]; then
-    printf -v cmd '%s bash %q%s' "$env_prefix" "$self_script" "$quoted_args"
   else
     local script_url="https://raw.githubusercontent.com/stellawills/slowdns/main/scripts/install.sh"
-    printf -v cmd '%s bash <(curl -4fsSL %q)%s' "$env_prefix" "$script_url" "$quoted_args"
+    self_script="$(mktemp /tmp/slowdns-install-XXXXXX.sh)"
+    if ! curl -4fsSL "$script_url" -o "$self_script" 2>/dev/null; then
+      rm -f "$self_script"
+      printf '%sWarning: could not download installer for screen session; running without screen.%s\n' "$_c_yellow" "$_c_reset" >&2
+      return 0
+    fi
+    chmod 700 "$self_script"
   fi
 
-  exec screen -D -RR -S "$session_name" bash -lc "$cmd"
+  exec screen -D -RR -S "$session_name" bash "$self_script" "$@"
 }
 
 license_requested() {

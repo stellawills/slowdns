@@ -4,7 +4,7 @@ set -euo pipefail
 BOOTSTRAP_REPO_URL="https://github.com/stellawills/slowdns.git"
 BOOTSTRAP_REF="main"
 BOOTSTRAP_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/stellawills/slowdns/${BOOTSTRAP_REF}/scripts/install.sh"
-BOOTSTRAP_INSTALL_SCRIPT_SHA256="0d636302b3059eb28c19f955829fc9ec0ca0b6fca8f8700ed90e2b04053a6946"
+BOOTSTRAP_INSTALL_SCRIPT_SHA256="ccd4c16ef0d67b5d7fb87303199188cb49fb580410570bf3f87eb21cd6399a5f"
 BOOTSTRAP_TMPDIR=""
 
 cleanup_bootstrap() {
