@@ -263,7 +263,29 @@ maybe_reexec_in_screen() {
   if [[ "$#" -gt 0 ]]; then
     printf -v quoted_args ' %q' "$@"
   fi
-  printf -v cmd 'cd %q && SLOWDNS_SCREEN_ATTACHED=true bash %q%s' "$PROJECT_DIR" "$SCRIPT_DIR/install.sh" "$quoted_args"
+
+  # Explicitly carry the install code so the screen session doesn't prompt again
+  # if the user pre-set it. Other inherited env vars pass through automatically.
+  local env_prefix="SLOWDNS_SCREEN_ATTACHED=true"
+  [[ -n "${INSTALL_CODE:-}" ]] && env_prefix+=" SLOWDNS_INSTALL_CODE=$(printf '%q' "$INSTALL_CODE")"
+
+  # When run via bash <(curl ...) directly, BASH_SOURCE[0] is a file-descriptor
+  # path like /dev/fd/63 — not a real file. When run through the bootstrap
+  # wrapper (root install.sh), BASH_SOURCE[0] is the real tmpdir path.
+  # Fall back to re-downloading scripts/install.sh from GitHub if no real file
+  # is available, to avoid screen starting and immediately failing.
+  local self_script=""
+  if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+    self_script="${BASH_SOURCE[0]}"
+  fi
+
+  if [[ -n "$self_script" ]]; then
+    printf -v cmd '%s bash %q%s' "$env_prefix" "$self_script" "$quoted_args"
+  else
+    local script_url="https://raw.githubusercontent.com/stellawills/slowdns/main/scripts/install.sh"
+    printf -v cmd '%s bash <(curl -4fsSL %q)%s' "$env_prefix" "$script_url" "$quoted_args"
+  fi
+
   exec screen -D -RR -S "$session_name" bash -lc "$cmd"
 }
 
