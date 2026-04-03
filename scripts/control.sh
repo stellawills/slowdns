@@ -11,24 +11,48 @@ SERVICES=(
   "slowdns-expire-sync.timer|Expiry Sync Timer"
 )
 
-service_field() {
-  local unit="$1" field="$2"
-  local value=""
-  value="$(systemctl "$field" "$unit" 2>/dev/null || true)"
-  value="$(printf '%s' "$value" | tr -d '\r' | head -n1)"
-  printf '%s' "${value:-unknown}"
+service_states() {
+  local field="$1"
+  shift
+  local output=() line
+  if ! output=($(systemctl "$field" "$@" 2>/dev/null)); then
+    :
+  fi
+  if ((${#output[@]} == 0)); then
+    local unit
+    for unit in "$@"; do
+      printf '%s\n' "unknown"
+    done
+    return 0
+  fi
+  for line in "${output[@]}"; do
+    printf '%s\n' "${line:-unknown}"
+  done
 }
 
 show_status() {
   printf '  %-26s %-12s %-12s\n' "SERVICE" "ACTIVE" "ENABLED"
   printf '  %-26s %-12s %-12s\n' "--------------------------" "------------" "------------"
 
-  local item unit label active enabled
+  local units=() active_states=() enabled_states=()
+  local item unit label index active enabled
   for item in "${SERVICES[@]}"; do
-    unit="${item%%|*}"
+    units+=("${item%%|*}")
+  done
+
+  while IFS= read -r line; do
+    active_states+=("$line")
+  done < <(service_states is-active "${units[@]}")
+
+  while IFS= read -r line; do
+    enabled_states+=("$line")
+  done < <(service_states is-enabled "${units[@]}")
+
+  for index in "${!SERVICES[@]}"; do
+    item="${SERVICES[$index]}"
     label="${item##*|}"
-    active="$(service_field "$unit" is-active)"
-    enabled="$(service_field "$unit" is-enabled)"
+    active="${active_states[$index]:-unknown}"
+    enabled="${enabled_states[$index]:-unknown}"
     printf '  %-26s %-12s %-12s\n' "$label" "$active" "$enabled"
   done
 }

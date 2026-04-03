@@ -13,6 +13,8 @@ import secrets
 import sqlite3
 import subprocess
 import sys
+import threading
+import time
 import traceback
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
@@ -21,6 +23,9 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 APP_VERSION = "2026.03.29"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,20}$")
 MAX_BODY_BYTES = 1_048_576
+CONFIG_REFRESH_INTERVAL_SECONDS = 1.0
+EXPIRE_RECONCILE_INTERVAL_SECONDS = 5.0
+SERVICE_SUMMARY_CACHE_SECONDS = 3.0
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "bind": "127.0.0.1",
@@ -186,25 +191,70 @@ def row_value(row: Union[sqlite3.Row, Dict[str, Any]], key: str, default: Any = 
     return row.get(key, default)
 
 
+def file_mtime_ns(path: pathlib.Path) -> Optional[int]:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
 class SlowDnsOnlyState:
     def __init__(self, config_path: pathlib.Path, dry_run: bool = False) -> None:
         self.config_path = config_path
         self.dry_run = dry_run
-        self.config = load_config(config_path)
-        self.db_path = pathlib.Path(str(self.config.get("db_path") or "/opt/slowdns/config/slowdns.db"))
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+        self._state_lock = threading.RLock()
+        self._config_checked_at = 0.0
+        self._config_mtime_ns: Optional[int] = None
+        self._public_key_cache_key: Tuple[str, Optional[int]] = ("", None)
+        self._public_key_cache_value = ""
+        self._service_summary_cache: List[Dict[str, Any]] = []
+        self._service_summary_cached_at = 0.0
+        self._last_expire_reconcile_at = 0.0
+        self._last_expire_reconcile_day = ""
+        self.config: Dict[str, Any] = {}
+        self.db_path = pathlib.Path("/opt/slowdns/config/slowdns.db")
+        self.refresh_config(force=True)
 
-    def refresh_config(self) -> None:
-        self.config = load_config(self.config_path)
+    def refresh_config(self, force: bool = False) -> None:
+        now = time.monotonic()
+        with self._state_lock:
+            if not force and now - self._config_checked_at < CONFIG_REFRESH_INTERVAL_SECONDS:
+                return
+            self._config_checked_at = now
+
+        current_mtime_ns = file_mtime_ns(self.config_path)
+        with self._state_lock:
+            if not force and current_mtime_ns == self._config_mtime_ns:
+                return
+            previous_db_path = self.db_path
+
+        config = load_config(self.config_path)
+        db_path = pathlib.Path(str(config.get("db_path") or "/opt/slowdns/config/slowdns.db"))
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self._state_lock:
+            self.config = config
+            self.db_path = db_path
+            self._config_mtime_ns = current_mtime_ns
+            self._public_key_cache_key = ("", None)
+            self._public_key_cache_value = ""
+            self._service_summary_cache = []
+            self._service_summary_cached_at = 0.0
+
+        if force or db_path != previous_db_path:
+            self._init_db()
 
     def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA temp_store = MEMORY")
         return conn
 
     def _init_db(self) -> None:
         with self.connect() as conn:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS account_sshs (
@@ -227,6 +277,12 @@ class SlowDnsOnlyState:
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_account_sshs_expiry
+                ON account_sshs (date_exp, status, status_lock)
                 """
             )
             conn.commit()
@@ -297,38 +353,53 @@ class SlowDnsOnlyState:
 
     def slowdns_public_key(self) -> str:
         path = pathlib.Path(str(self.slowdns_config().get("public_key_path") or ""))
-        if not path.exists():
-            return ""
-        return path.read_text(encoding="utf-8").strip()
+        if not path.is_file():
+            cache_key = (str(path), None)
+        else:
+            cache_key = (str(path), file_mtime_ns(path))
+        with self._state_lock:
+            if cache_key == self._public_key_cache_key:
+                return self._public_key_cache_value
+        value = ""
+        if cache_key[1] is not None:
+            value = path.read_text(encoding="utf-8").strip()
+        with self._state_lock:
+            self._public_key_cache_key = cache_key
+            self._public_key_cache_value = value
+        return value
 
     def slowdns_info(self) -> Optional[Dict[str, Any]]:
-        if not self.slowdns_enabled():
-            return None
         config = self.slowdns_config()
+        if not bool(config.get("enabled", False)):
+            return None
+        ns_host = self.slowdns_ns_host()
+        tunnel_domain = self.slowdns_zone()
+        public_ip = self.public_ip()
         public_port = int(config.get("public_port", config.get("listen_port", 53)))
+        local_port = int(config.get("local_port", 8000))
         return {
             "enabled": True,
             "listen_port": int(config.get("listen_port", 53)),
             "public_port": public_port,
-            "local_port": int(config.get("local_port", 8000)),
-            "ns_host": self.slowdns_ns_host(),
+            "local_port": local_port,
+            "ns_host": ns_host,
             "public_key": self.slowdns_public_key(),
             "records": {
-                "a": {"type": "A", "name": self.slowdns_ns_host(), "value": self.public_ip()},
-                "ns": {"type": "NS", "name": self.slowdns_zone(), "value": self.slowdns_ns_host()},
+                "a": {"type": "A", "name": ns_host, "value": public_ip},
+                "ns": {"type": "NS", "name": tunnel_domain, "value": ns_host},
             },
             "service": str(config.get("service") or ""),
             "target": str(config.get("target") or "127.0.0.1:22"),
-            "tunnel_domain": self.slowdns_zone(),
+            "tunnel_domain": tunnel_domain,
             "usage": {
                 "summary": (
-                    f"Create A {self.slowdns_ns_host()} -> {self.public_ip()} and "
-                    f"NS {self.slowdns_zone()} -> {self.slowdns_ns_host()} on the parent zone."
+                    f"Create A {ns_host} -> {public_ip} and "
+                    f"NS {tunnel_domain} -> {ns_host} on the parent zone."
                 ),
-                "connect_host": self.slowdns_zone(),
+                "connect_host": tunnel_domain,
                 "connect_port": public_port,
                 "client_local_host": "127.0.0.1",
-                "client_local_port": int(config.get("local_port", 8000)),
+                "client_local_port": local_port,
             },
         }
 
@@ -399,43 +470,57 @@ class SlowDnsOnlyState:
             return conn.execute("SELECT * FROM account_sshs WHERE username = ?", (username,)).fetchone()
 
     def list_accounts(self) -> List[Dict[str, Any]]:
-        self.reconcile_expired_accounts()
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM account_sshs ORDER BY username ASC").fetchall()
         return [dict(row) for row in rows]
 
     def list_recovery_accounts(self) -> List[Dict[str, Any]]:
-        rows = self.list_accounts()
-        return [
-            row
-            for row in rows
-            if row.get("status_lock") == "LOCKED"
-            or str(row.get("status", "")).upper() != "AKTIF"
-            or int(row.get("at_banned", 0) or 0) != 0
-        ]
-
-    def reconcile_expired_accounts(self) -> int:
-        today = dt.date.today().isoformat()
-        updated = 0
         with self.connect() as conn:
-            rows = conn.execute("SELECT username, status_lock FROM account_sshs WHERE date_exp < ?", (today,)).fetchall()
+            rows = conn.execute(
+                """
+                SELECT * FROM account_sshs
+                WHERE status_lock = 'LOCKED' OR status != 'AKTIF' OR at_banned != 0
+                ORDER BY username ASC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def reconcile_expired_accounts(self, today: Optional[str] = None) -> int:
+        current_day = today or dt.date.today().isoformat()
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT username FROM account_sshs WHERE date_exp < ? AND status_lock != 'LOCKED'",
+                (current_day,),
+            ).fetchall()
             for row in rows:
-                if str(row["status_lock"]).upper() != "LOCKED":
-                    try:
-                        self.lock_system_user(str(row["username"]))
-                    except Exception:
-                        pass
-                conn.execute(
-                    """
-                    UPDATE account_sshs
-                    SET status = 'EXPIRED', status_lock = 'LOCKED', updated_at = CURRENT_TIMESTAMP
-                    WHERE username = ?
-                    """,
-                    (row["username"],),
-                )
-                updated += 1
+                try:
+                    self.lock_system_user(str(row["username"]))
+                except Exception:
+                    pass
+            cursor = conn.execute(
+                """
+                UPDATE account_sshs
+                SET status = 'EXPIRED', status_lock = 'LOCKED', updated_at = CURRENT_TIMESTAMP
+                WHERE date_exp < ? AND (status != 'EXPIRED' OR status_lock != 'LOCKED')
+                """,
+                (current_day,),
+            )
             conn.commit()
-        return updated
+        return max(cursor.rowcount, 0)
+
+    def maybe_reconcile_expired_accounts(self, force: bool = False) -> int:
+        current_day = dt.date.today().isoformat()
+        now = time.monotonic()
+        with self._state_lock:
+            if (
+                not force
+                and self._last_expire_reconcile_day == current_day
+                and now - self._last_expire_reconcile_at < EXPIRE_RECONCILE_INTERVAL_SECONDS
+            ):
+                return 0
+            self._last_expire_reconcile_day = current_day
+            self._last_expire_reconcile_at = now
+        return self.reconcile_expired_accounts(today=current_day)
 
     def build_ssh_payload(self, username: str, password: str, expires_on: str) -> Dict[str, Any]:
         host = self.hostname()
@@ -659,18 +744,39 @@ class SlowDnsOnlyState:
             "slowdns-udp53-redirect",
             "slowdns-expire-sync.timer",
         ]
+        if os.name != "posix":
+            return [{"name": service, "active": "unsupported", "enabled": "unsupported"} for service in services]
+        now = time.monotonic()
+        with self._state_lock:
+            if now - self._service_summary_cached_at < SERVICE_SUMMARY_CACHE_SECONDS and self._service_summary_cache:
+                return [dict(item) for item in self._service_summary_cache]
+
         summary: List[Dict[str, Any]] = []
-        for service in services:
-            if os.name != "posix":
-                summary.append({"name": service, "active": "unsupported", "enabled": "unsupported"})
-                continue
-            try:
-                active = subprocess.run(["systemctl", "is-active", service], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False).stdout.strip() or "unknown"
-                enabled = subprocess.run(["systemctl", "is-enabled", service], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False).stdout.strip() or "unknown"
-            except OSError:
-                active = "unsupported"
-                enabled = "unsupported"
+        try:
+            active_rows = subprocess.run(
+                ["systemctl", "is-active", *services],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            ).stdout.splitlines()
+            enabled_rows = subprocess.run(
+                ["systemctl", "is-enabled", *services],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            ).stdout.splitlines()
+        except OSError:
+            active_rows = []
+            enabled_rows = []
+        for index, service in enumerate(services):
+            active = active_rows[index].strip() if index < len(active_rows) and active_rows[index].strip() else "unknown"
+            enabled = enabled_rows[index].strip() if index < len(enabled_rows) and enabled_rows[index].strip() else "unknown"
             summary.append({"name": service, "active": active, "enabled": enabled})
+        with self._state_lock:
+            self._service_summary_cache = [dict(item) for item in summary]
+            self._service_summary_cached_at = now
         return summary
 
     def runtime_summary(self) -> Dict[str, Any]:
@@ -924,14 +1030,17 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
     def _dispatch(self, method: str) -> None:
         is_v2_route = False
         try:
-            self.server.state.refresh_config()
-            self.server.state.reconcile_expired_accounts()
             route = urllib.parse.urlparse(self.path).path
             is_v2_route = route.startswith("/api/v2")
-            body = self._read_body() if method in {"POST", "PATCH"} else {}
             if route == "/healthz" and method == "GET":
                 self._send_json(200, {"status": "ok"})
                 return
+            if route == "/api/v2/healthz" and method == "GET":
+                self._send_v2_success(200, {"status": "ok", "version": "2"})
+                return
+            self.server.state.refresh_config()
+            self.server.state.maybe_reconcile_expired_accounts()
+            body = self._read_body() if method in {"POST", "PATCH"} else {}
             if is_v2_route:
                 status, data, meta = self._handle_v2_route(method, route, body)
                 self._send_v2_success(status, data, meta)
@@ -971,7 +1080,7 @@ def serve(config_path: pathlib.Path, dry_run: bool) -> None:
 
 def run_expire_sync(config_path: pathlib.Path, dry_run: bool) -> None:
     state = SlowDnsOnlyState(config_path, dry_run=dry_run)
-    print(json.dumps({"updated": state.reconcile_expired_accounts()}))
+    print(json.dumps({"updated": state.maybe_reconcile_expired_accounts(force=True)}))
 
 
 def main() -> int:

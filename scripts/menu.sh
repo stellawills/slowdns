@@ -12,6 +12,8 @@ PUBLIC_IP=""
 API_RESPONSE=""
 API_STATUS=""
 API_ERROR=""
+API_CONNECT_TIMEOUT="${SLOWDNS_API_CONNECT_TIMEOUT:-3}"
+API_MAX_TIME="${SLOWDNS_API_MAX_TIME:-30}"
 MENU_VERSION="2026.03.30"
 
 C_BOLD=$'\033[1m'
@@ -168,7 +170,16 @@ api_request() {
   local output_file error_file curl_rc
   output_file="$(mktemp)"
   error_file="$(mktemp)"
-  local args=(-sS -X "$method" "${API_BASE}${route}" -H "Content-Type: application/json" -o "$output_file" -w "%{http_code}")
+  local args=(
+    -sS
+    --connect-timeout "$API_CONNECT_TIMEOUT"
+    --max-time "$API_MAX_TIME"
+    -X "$method"
+    "${API_BASE}${route}"
+    -H "Content-Type: application/json"
+    -o "$output_file"
+    -w "%{http_code}"
+  )
   if [[ -n "$body" ]]; then
     args+=(-d "$body")
   fi
