@@ -14,6 +14,8 @@ SYSTEMD_DIR="/etc/systemd/system"
 DNSTT_SOURCE_URL="${DNSTT_SOURCE_URL:-https://www.bamsoftware.com/software/dnstt/dnstt-20241021.zip}"
 DNSTT_SERVER_URL="${DNSTT_SERVER_URL:-}"
 DNSTT_CLIENT_URL="${DNSTT_CLIENT_URL:-}"
+GO_VERSION="${GO_VERSION:-1.22.12}"
+GO_BIN="${GO_BIN:-go}"
 
 # ── License / Activation ─────────────────────────────────────────
 INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
@@ -32,6 +34,7 @@ LICENSE_LAST_HTTP_STATUS=""
 LICENSE_LAST_ERROR_CODE=""
 LICENSE_LAST_ERROR_MESSAGE=""
 CONFIG_HOSTNAME=""
+CONFIG_TUNNEL_DOMAIN=""
 CONFIG_PUBLIC_IP=""
 
 # ── Utilities ────────────────────────────────────────────────────
@@ -55,6 +58,35 @@ print_section() {
   printf '============================================================\n'
 }
 
+prompt_with_default() {
+  local prompt="${1:-}" default_value="${2:-}" value=""
+  if [[ ! -t 0 ]]; then
+    printf '%s' "$default_value"
+    return 0
+  fi
+  if [[ -n "$default_value" ]]; then
+    read -r -p "$prompt [$default_value]: " value
+    value="$(trim "${value:-}")"
+    if [[ -z "$value" ]]; then
+      value="$default_value"
+    fi
+  else
+    while true; do
+      read -r -p "$prompt: " value
+      value="$(trim "${value:-}")"
+      [[ -n "$value" ]] && break
+      echo "A value is required." >&2
+    done
+  fi
+  printf '%s' "$value"
+}
+
+valid_dns_name() {
+  local value="${1:-}"
+  [[ "$value" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+  [[ "$value" != .* && "$value" != *. && "$value" != *..* ]] || return 1
+}
+
 require_root() {
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     echo "run as root" >&2
@@ -68,11 +100,44 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y python3 curl unzip openssh-server ca-certificates
-    if ! command -v go >/dev/null 2>&1; then
-      apt-get install -y golang-go
+    apt-get install -y python3 curl unzip openssh-server ca-certificates iptables
+  fi
+}
+
+ensure_go_toolchain() {
+  local detected_version="" arch="" archive="" url="" tmpdir=""
+
+  if command -v "$GO_BIN" >/dev/null 2>&1; then
+    detected_version="$("$GO_BIN" version 2>/dev/null | awk '{print $3}' | sed 's/^go//')"
+    if python3 - "$detected_version" <<'PY'
+import sys
+parts = [int(p) for p in (sys.argv[1] or "0").split(".") if p.isdigit()]
+parts += [0] * (3 - len(parts))
+raise SystemExit(0 if tuple(parts[:3]) >= (1, 21, 0) else 1)
+PY
+    then
+      return 0
     fi
   fi
+
+  case "$(uname -m)" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *)
+      echo "unsupported architecture for bundled Go bootstrap: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  archive="go${GO_VERSION}.linux-${arch}.tar.gz"
+  url="https://go.dev/dl/${archive}"
+  tmpdir="$(mktemp -d)"
+  curl -4fsSL "$url" -o "$tmpdir/$archive"
+  rm -rf /usr/local/go
+  tar -C /usr/local -xzf "$tmpdir/$archive"
+  rm -rf "$tmpdir"
+  GO_BIN="/usr/local/go/bin/go"
+  export PATH="/usr/local/go/bin:$PATH"
 }
 
 # ── Detection helpers ────────────────────────────────────────────
@@ -93,6 +158,72 @@ detect_hostname() {
     return
   fi
   hostname -f 2>/dev/null || hostname 2>/dev/null || true
+}
+
+derive_tunnel_domain() {
+  local public_host="${1:-}" stripped=""
+  public_host="$(lower "$(trim "$public_host")")"
+  if [[ -z "$public_host" ]]; then
+    printf '%s' "slowdns.example.com"
+    return 0
+  fi
+  if [[ "$public_host" == *.* ]]; then
+    stripped="${public_host#*.}"
+    if [[ -n "$stripped" && "$stripped" != "$public_host" ]]; then
+      printf '%s' "slowdns.${stripped}"
+      return 0
+    fi
+  fi
+  printf '%s' "slowdns.${public_host}"
+}
+
+prompt_runtime_values() {
+  local detected_host detected_tunnel detected_ip input_value
+
+  detected_host="$(trim "${SLOWDNS_PUBLIC_HOSTNAME:-${SLOWDNS_HOSTNAME:-$CONFIG_HOSTNAME}}")"
+  while true; do
+    input_value="$(prompt_with_default "SlowDNS public hostname (A record host)" "$detected_host")"
+    input_value="$(lower "$(trim "$input_value")")"
+    if valid_dns_name "$input_value"; then
+      CONFIG_HOSTNAME="$input_value"
+      break
+    fi
+    if [[ ! -t 0 ]]; then
+      echo "SLOWDNS_PUBLIC_HOSTNAME must be set in non-interactive mode." >&2
+      exit 1
+    fi
+    echo "Enter a valid DNS host like dns.example.com." >&2
+  done
+
+  detected_tunnel="$(trim "${SLOWDNS_TUNNEL_DOMAIN:-$(derive_tunnel_domain "$CONFIG_HOSTNAME")}")"
+  while true; do
+    input_value="$(prompt_with_default "SlowDNS delegated tunnel domain" "$detected_tunnel")"
+    input_value="$(lower "$(trim "$input_value")")"
+    if valid_dns_name "$input_value"; then
+      CONFIG_TUNNEL_DOMAIN="$input_value"
+      break
+    fi
+    if [[ ! -t 0 ]]; then
+      echo "SLOWDNS_TUNNEL_DOMAIN must be set in non-interactive mode." >&2
+      exit 1
+    fi
+    echo "Enter a valid delegated DNS domain like slowdns.example.com." >&2
+  done
+
+  detected_ip="$(trim "${SLOWDNS_PUBLIC_IP:-$CONFIG_PUBLIC_IP}")"
+  while true; do
+    input_value="$(prompt_with_default "Public IPv4 for this VPS" "$detected_ip")"
+    input_value="$(trim "$input_value")"
+    if [[ "$input_value" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+      CONFIG_PUBLIC_IP="$input_value"
+      break
+    fi
+    if [[ ! -t 0 ]]; then
+      echo "SLOWDNS_PUBLIC_IP must be set in non-interactive mode." >&2
+      exit 1
+    fi
+    echo "Enter a valid IPv4 address." >&2
+  done
 }
 
 detect_machine_id() {
@@ -463,22 +594,32 @@ copy_project() {
   install -m 0755 "$PROJECT_DIR/api/slowdns_only_api.py" "$API_DIR/slowdns_only_api.py"
   install -m 0755 "$PROJECT_DIR/scripts/run-api.sh" "$SCRIPTS_DIR/run-api.sh"
   install -m 0755 "$PROJECT_DIR/scripts/run-dnstt.sh" "$SCRIPTS_DIR/run-dnstt.sh"
+  install -m 0755 "$PROJECT_DIR/scripts/udp53-redirect.sh" "$SCRIPTS_DIR/udp53-redirect.sh"
   install -m 0755 "$PROJECT_DIR/scripts/control.sh" "$SCRIPTS_DIR/control.sh"
   install -m 0755 "$PROJECT_DIR/scripts/expire-sync.sh" "$SCRIPTS_DIR/expire-sync.sh"
+  install -m 0755 "$PROJECT_DIR/scripts/menu.sh" "$SCRIPTS_DIR/menu.sh"
+  ln -sf "$SCRIPTS_DIR/menu.sh" /usr/local/bin/slowdns
+  ln -sf "$SCRIPTS_DIR/control.sh" /usr/local/bin/slowdns-ctl
 }
 
 render_config() {
-  local listen_port api_bind api_port mtu zone_prefix ns_prefix local_port
-  listen_port="${SLOWDNS_LISTEN_PORT:-53}"
+  local listen_port public_port api_bind api_port mtu local_port redirect_53
+  listen_port="${SLOWDNS_LISTEN_PORT:-5300}"
+  public_port="${SLOWDNS_PUBLIC_PORT:-53}"
   api_bind="${SLOWDNS_API_BIND:-127.0.0.1}"
   api_port="${SLOWDNS_API_PORT:-8091}"
   mtu="${SLOWDNS_MTU:-512}"
-  zone_prefix="${SLOWDNS_ZONE_PREFIX:-dns}"
-  ns_prefix="${SLOWDNS_NS_PREFIX:-}"
   local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-8000}"
+  redirect_53="false"
+  if [[ "$public_port" == "53" && "$listen_port" != "53" ]]; then
+    redirect_53="true"
+  fi
 
-  if [[ ! -f "$CONFIG_DIR/config.json" ]]; then
-    cat >"$CONFIG_DIR/config.json" <<JSON
+  if [[ -f "$CONFIG_DIR/config.json" ]]; then
+    cp -f "$CONFIG_DIR/config.json" "$CONFIG_DIR/config.json.bak"
+  fi
+
+  cat >"$CONFIG_DIR/config.json" <<JSON
 {
   "bind": "$api_bind",
   "port": $api_port,
@@ -492,13 +633,13 @@ render_config() {
     "shell": "/bin/false",
     "ws_path": "/sshws",
     "ports": {
-      "any": "22,$listen_port",
+      "any": "22,$public_port",
       "none": "-",
       "ssh": "22",
       "dropbear": "-",
       "ssl": "-",
       "ws": "-",
-      "slowdns": "$listen_port",
+      "slowdns": "$public_port",
       "squid": "-",
       "hysteria": "-",
       "ovpnohp": "-",
@@ -508,19 +649,20 @@ render_config() {
   },
   "slowdns": {
     "enabled": true,
-    "service": "slowdns-only-dnstt",
+    "service": "slowdns-dnstt",
     "listen_port": $listen_port,
+    "public_port": $public_port,
+    "redirect_53": $redirect_53,
     "local_port": $local_port,
     "target": "127.0.0.1:22",
-    "zone_prefix": "$zone_prefix",
-    "ns_prefix": "$ns_prefix",
+    "public_hostname": "$CONFIG_HOSTNAME",
+    "tunnel_domain": "$CONFIG_TUNNEL_DOMAIN",
     "mtu": $mtu,
     "public_key_path": "$CONFIG_DIR/server.pub",
     "private_key_path": "$CONFIG_DIR/server.key"
   }
 }
 JSON
-  fi
 }
 
 build_dnstt() {
@@ -532,17 +674,15 @@ build_dnstt() {
     curl -fsSL "$DNSTT_SERVER_URL" -o "$BIN_DIR/dnstt-server"
     curl -fsSL "$DNSTT_CLIENT_URL" -o "$BIN_DIR/dnstt-client"
     chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
+    cp -f "$BIN_DIR/dnstt-server" "$BIN_DIR/dns-server"
+    cp -f "$BIN_DIR/dnstt-client" "$BIN_DIR/dns-client"
+    chmod 0755 "$BIN_DIR/dns-server" "$BIN_DIR/dns-client"
     return
   fi
 
-  if ! command -v go >/dev/null 2>&1; then
-    echo "go is required to build dnstt" >&2
-    exit 1
-  fi
-
   local tmpdir srcdir
+  ensure_go_toolchain
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
   curl -fsSL "$DNSTT_SOURCE_URL" -o "$tmpdir/dnstt.zip"
   unzip -q "$tmpdir/dnstt.zip" -d "$tmpdir"
   srcdir="$(find "$tmpdir" -maxdepth 1 -type d -name 'dnstt-*' | head -n1)"
@@ -550,9 +690,13 @@ build_dnstt() {
     echo "failed to unpack dnstt source" >&2
     exit 1
   fi
-  (cd "$srcdir/dnstt-server" && go build -o "$BIN_DIR/dnstt-server")
-  (cd "$srcdir/dnstt-client" && go build -o "$BIN_DIR/dnstt-client")
+  (cd "$srcdir/dnstt-server" && "$GO_BIN" build -o "$BIN_DIR/dnstt-server")
+  (cd "$srcdir/dnstt-client" && "$GO_BIN" build -o "$BIN_DIR/dnstt-client")
   chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
+  cp -f "$BIN_DIR/dnstt-server" "$BIN_DIR/dns-server"
+  cp -f "$BIN_DIR/dnstt-client" "$BIN_DIR/dns-client"
+  chmod 0755 "$BIN_DIR/dns-server" "$BIN_DIR/dns-client"
+  rm -rf "$tmpdir"
 }
 
 generate_keys() {
@@ -563,10 +707,23 @@ generate_keys() {
   fi
 }
 
+cleanup_legacy_units() {
+  local unit
+  for unit in \
+    slowdns-only-api.service \
+    slowdns-only-dnstt.service \
+    slowdns-only-udp53-redirect.service \
+    slowdns-only-expire-sync.service \
+    slowdns-only-expire-sync.timer; do
+    systemctl disable --now "$unit" >/dev/null 2>&1 || true
+    rm -f "$SYSTEMD_DIR/$unit"
+  done
+}
+
 write_units() {
-  cat >"$SYSTEMD_DIR/slowdns-only-api.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-api.service" <<UNIT
 [Unit]
-Description=SlowDNS Only API
+Description=SlowDNS API
 After=network-online.target ssh.service
 Wants=network-online.target
 
@@ -580,9 +737,9 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-dnstt.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-dnstt.service" <<UNIT
 [Unit]
-Description=SlowDNS Only dnstt Server
+Description=SlowDNS dnstt Server
 After=network-online.target ssh.service
 Wants=network-online.target
 
@@ -596,24 +753,40 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-expire-sync.service" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-udp53-redirect.service" <<UNIT
 [Unit]
-Description=SlowDNS Only expiry synchronizer
-After=slowdns-only-api.service
+Description=SlowDNS UDP 53 redirect
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/slowdns-only/scripts/udp53-redirect.sh apply
+ExecStop=/opt/slowdns-only/scripts/udp53-redirect.sh clear
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+  cat >"$SYSTEMD_DIR/slowdns-expire-sync.service" <<UNIT
+[Unit]
+Description=SlowDNS expiry synchronizer
+After=slowdns-api.service
 
 [Service]
 Type=oneshot
 ExecStart=/opt/slowdns-only/scripts/expire-sync.sh
 UNIT
 
-  cat >"$SYSTEMD_DIR/slowdns-only-expire-sync.timer" <<UNIT
+  cat >"$SYSTEMD_DIR/slowdns-expire-sync.timer" <<UNIT
 [Unit]
-Description=Run SlowDNS Only expiry sync every 15 minutes
+Description=Run SlowDNS expiry sync every 15 minutes
 
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=15min
-Unit=slowdns-only-expire-sync.service
+Unit=slowdns-expire-sync.service
 
 [Install]
 WantedBy=timers.target
@@ -622,9 +795,10 @@ UNIT
 
 start_services() {
   systemctl daemon-reload
-  systemctl enable --now slowdns-only-api.service
-  systemctl enable --now slowdns-only-dnstt.service
-  systemctl enable --now slowdns-only-expire-sync.timer
+  systemctl enable --now slowdns-api.service
+  systemctl enable --now slowdns-dnstt.service
+  systemctl enable --now slowdns-udp53-redirect.service
+  systemctl enable --now slowdns-expire-sync.timer
 }
 
 main() {
@@ -635,19 +809,24 @@ main() {
   CONFIG_HOSTNAME="$(trim "$(detect_hostname)")"
   CONFIG_PUBLIC_IP="$(trim "$(detect_public_ip)")"
   license_prompt_key
+  prompt_runtime_values
   license_activate
   printf 'Preparing SlowDNS files...\n'
   copy_project
   render_config
   build_dnstt
   generate_keys
+  cleanup_legacy_units
   write_units
   start_services
   license_confirm
   write_license_metadata
-  echo "slowdns-only installed under $INSTALL_DIR"
-  echo "api: systemctl status slowdns-only-api"
-  echo "dnstt: systemctl status slowdns-only-dnstt"
+  echo "slowdns installed under $INSTALL_DIR"
+  echo "api: systemctl status slowdns-api"
+  echo "dnstt: systemctl status slowdns-dnstt"
+  echo "menu: slowdns"
+  echo "dns: A ${CONFIG_HOSTNAME} -> ${CONFIG_PUBLIC_IP}"
+  echo "dns: NS ${CONFIG_TUNNEL_DOMAIN} -> ${CONFIG_HOSTNAME}"
   if [[ "$LICENSE_CONFIRMED" == "true" ]]; then
     echo "install code: ${INSTALL_CODE_HINT} activated via ${LICENSE_URL}"
   fi

@@ -18,7 +18,7 @@ import urllib.parse
 from typing import Any
 
 
-APP_VERSION = "2026.03.29"
+APP_VERSION = "2026.04.18"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,20}$")
 MAX_BODY_BYTES = 1_048_576
 
@@ -51,10 +51,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "slowdns": {
         "enabled": True,
-        "service": "slowdns-only-dnstt",
-        "listen_port": 53,
+        "service": "slowdns-dnstt",
+        "listen_port": 5300,
+        "public_port": 53,
+        "redirect_53": True,
         "local_port": 8000,
         "target": "127.0.0.1:22",
+        "public_hostname": "",
+        "tunnel_domain": "",
         "zone_prefix": "dns",
         "ns_prefix": "",
         "mtu": 512,
@@ -261,15 +265,42 @@ class SlowDnsOnlyState:
     def slowdns_enabled(self) -> bool:
         return bool(self.slowdns_config().get("enabled", False))
 
-    def slowdns_zone(self) -> str:
+    def _legacy_slowdns_zone(self) -> str:
         prefix = str(self.slowdns_config().get("zone_prefix") or "").strip(".")
         host = self.hostname().strip(".")
         return f"{prefix}.{host}" if prefix else host
 
-    def slowdns_ns_host(self) -> str:
+    def _legacy_slowdns_ns_host(self) -> str:
         prefix = str(self.slowdns_config().get("ns_prefix") or "").strip(".")
         host = self.hostname().strip(".")
         return f"{prefix}.{host}" if prefix else host
+
+    def slowdns_public_hostname(self) -> str:
+        config = self.slowdns_config()
+        explicit = str(config.get("public_hostname") or config.get("ns_host") or "").strip(".")
+        if explicit:
+            return explicit
+        legacy = self._legacy_slowdns_ns_host()
+        if legacy:
+            return legacy
+        return self.hostname().strip(".")
+
+    def slowdns_tunnel_domain(self) -> str:
+        config = self.slowdns_config()
+        explicit = str(config.get("tunnel_domain") or "").strip(".")
+        if explicit:
+            return explicit
+        legacy = self._legacy_slowdns_zone()
+        if legacy:
+            return legacy
+        return self.hostname().strip(".")
+
+    def slowdns_public_port(self) -> int:
+        config = self.slowdns_config()
+        value = config.get("public_port")
+        if value is None or str(value).strip() == "":
+            value = config.get("listen_port", 53)
+        return int(value)
 
     def slowdns_public_key(self) -> str:
         path = pathlib.Path(str(self.slowdns_config().get("public_key_path") or ""))
@@ -281,25 +312,32 @@ class SlowDnsOnlyState:
         if not self.slowdns_enabled():
             return None
         config = self.slowdns_config()
+        public_host = self.slowdns_public_hostname()
+        tunnel_domain = self.slowdns_tunnel_domain()
+        public_ip = self.public_ip()
+        public_port = self.slowdns_public_port()
         return {
             "enabled": True,
-            "listen_port": int(config.get("listen_port", 53)),
+            "listen_port": int(config.get("listen_port", 5300)),
+            "public_port": public_port,
             "local_port": int(config.get("local_port", 8000)),
-            "ns_host": self.slowdns_ns_host(),
+            "ns_host": public_host,
+            "public_hostname": public_host,
+            "public_ip": public_ip,
             "public_key": self.slowdns_public_key(),
             "records": {
-                "a": {"type": "A", "name": self.slowdns_ns_host(), "value": self.public_ip()},
-                "ns": {"type": "NS", "name": self.slowdns_zone(), "value": self.slowdns_ns_host()},
+                "a": {"type": "A", "name": public_host, "value": public_ip},
+                "ns": {"type": "NS", "name": tunnel_domain, "value": public_host},
             },
-            "service": str(config.get("service") or ""),
+            "service": str(config.get("service") or "slowdns-dnstt"),
             "target": str(config.get("target") or "127.0.0.1:22"),
-            "tunnel_domain": self.slowdns_zone(),
+            "tunnel_domain": tunnel_domain,
             "usage": {
                 "summary": (
-                    f"Create A {self.slowdns_ns_host()} -> {self.public_ip()} and "
-                    f"NS {self.slowdns_zone()} -> {self.slowdns_ns_host()} on the parent zone."
+                    f"Create A {public_host} -> {public_ip} and "
+                    f"NS {tunnel_domain} -> {public_host} on the parent zone."
                 ),
-                "connect_host": self.slowdns_zone(),
+                "connect_host": tunnel_domain,
                 "client_local_host": "127.0.0.1",
                 "client_local_port": int(config.get("local_port", 8000)),
             },
@@ -415,6 +453,8 @@ class SlowDnsOnlyState:
         ssh_cfg = self.ssh_config()
         ws_path = str(ssh_cfg.get("ws_path", "/sshws") or "/sshws")
         ports = dict(ssh_cfg.get("ports") or {})
+        if "slowdns" not in ports or not str(ports.get("slowdns", "")).strip():
+            ports["slowdns"] = str(self.slowdns_public_port())
         data = {
             "CITY": self.config.get("city", ""),
             "ISP": self.config.get("isp", ""),
@@ -626,19 +666,48 @@ class SlowDnsOnlyState:
         return {"meta": self.build_meta(200, "success", "Account updated"), "data": {"expired": str(row["date_exp"]), "pass_uuid": secret_value, "status_lock": new_state, "username": username}}
 
     def service_summary(self) -> list[dict[str, Any]]:
-        services = ["slowdns-only-api", "slowdns-only-dnstt", "slowdns-only-expire-sync.timer"]
+        services = [
+            ("api", ["slowdns-api", "slowdns-only-api"]),
+            ("dnstt", ["slowdns-dnstt", "slowdns-only-dnstt"]),
+            ("udp53-redirect", ["slowdns-udp53-redirect", "slowdns-only-udp53-redirect"]),
+            ("expire-sync.timer", ["slowdns-expire-sync.timer", "slowdns-only-expire-sync.timer"]),
+        ]
         summary: list[dict[str, Any]] = []
-        for service in services:
+        for label, candidates in services:
+            display_name = candidates[0]
             if os.name != "posix":
-                summary.append({"name": service, "active": "unsupported", "enabled": "unsupported"})
+                summary.append({"name": display_name, "active": "unsupported", "enabled": "unsupported"})
                 continue
+            active = "unknown"
+            enabled = "unknown"
+            chosen = display_name
             try:
-                active = subprocess.run(["systemctl", "is-active", service], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False).stdout.strip() or "unknown"
-                enabled = subprocess.run(["systemctl", "is-enabled", service], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False).stdout.strip() or "unknown"
+                for candidate in candidates:
+                    active_result = subprocess.run(
+                        ["systemctl", "is-active", candidate],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False,
+                    )
+                    enabled_result = subprocess.run(
+                        ["systemctl", "is-enabled", candidate],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False,
+                    )
+                    candidate_active = active_result.stdout.strip() or active_result.stderr.strip() or "unknown"
+                    candidate_enabled = enabled_result.stdout.strip() or enabled_result.stderr.strip() or "unknown"
+                    if candidate_active != "unknown" or candidate_enabled != "unknown":
+                        chosen = candidate
+                        active = candidate_active
+                        enabled = candidate_enabled
+                        break
             except OSError:
                 active = "unsupported"
                 enabled = "unsupported"
-            summary.append({"name": service, "active": active, "enabled": enabled})
+            summary.append({"name": chosen, "active": active, "enabled": enabled})
         return summary
 
     def runtime_summary(self) -> dict[str, Any]:
@@ -933,7 +1002,7 @@ def serve(config_path: pathlib.Path, dry_run: bool) -> None:
     bind = str(state.config.get("bind") or "127.0.0.1")
     port = int(state.config.get("port") or 8091)
     server = SlowDnsOnlyServer((bind, port), SlowDnsOnlyHandler, state)
-    print(f"slowdns-only api listening on {bind}:{port}", flush=True)
+    print(f"slowdns api listening on {bind}:{port}", flush=True)
     server.serve_forever()
 
 
@@ -943,7 +1012,7 @@ def run_expire_sync(config_path: pathlib.Path, dry_run: bool) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Standalone SlowDNS-only API")
+    parser = argparse.ArgumentParser(description="Standalone SlowDNS API")
     parser.add_argument("--config", default="/opt/slowdns-only/config/config.json")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--expire-sync", action="store_true")
