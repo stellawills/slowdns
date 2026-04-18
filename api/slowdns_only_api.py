@@ -20,7 +20,7 @@ import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 
-APP_VERSION = "2026.03.29"
+APP_VERSION = "2026.04.18"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,20}$")
 MAX_BODY_BYTES = 1_048_576
 CONFIG_REFRESH_INTERVAL_SECONDS = 1.0
@@ -62,6 +62,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "redirect_53": True,
         "local_port": 8000,
         "target": "127.0.0.1:22",
+        "public_hostname": "",
         "tunnel_domain": "",
         "ns_host": "",
         "zone_prefix": "",
@@ -342,14 +343,17 @@ class SlowDnsOnlyState:
         host = self.hostname().strip(".")
         return self._compose_dns_name(prefix, host)
 
-    def slowdns_ns_host(self) -> str:
+    def slowdns_public_hostname(self) -> str:
         config = self.slowdns_config()
-        explicit = str(config.get("ns_host") or "").strip(".")
+        explicit = str(config.get("public_hostname") or config.get("ns_host") or "").strip(".")
         if explicit:
             return explicit
         prefix = str(config.get("ns_prefix") or "").strip(".")
         host = self.hostname().strip(".")
         return self._compose_dns_name(prefix, host)
+
+    def slowdns_ns_host(self) -> str:
+        return self.slowdns_public_hostname()
 
     def slowdns_public_key(self) -> str:
         path = pathlib.Path(str(self.slowdns_config().get("public_key_path") or ""))
@@ -372,7 +376,7 @@ class SlowDnsOnlyState:
         config = self.slowdns_config()
         if not bool(config.get("enabled", False)):
             return None
-        ns_host = self.slowdns_ns_host()
+        public_host = self.slowdns_public_hostname()
         tunnel_domain = self.slowdns_zone()
         public_ip = self.public_ip()
         public_port = int(config.get("public_port", config.get("listen_port", 53)))
@@ -382,19 +386,21 @@ class SlowDnsOnlyState:
             "listen_port": int(config.get("listen_port", 53)),
             "public_port": public_port,
             "local_port": local_port,
-            "ns_host": ns_host,
+            "ns_host": public_host,
+            "public_hostname": public_host,
+            "public_ip": public_ip,
             "public_key": self.slowdns_public_key(),
             "records": {
-                "a": {"type": "A", "name": ns_host, "value": public_ip},
-                "ns": {"type": "NS", "name": tunnel_domain, "value": ns_host},
+                "a": {"type": "A", "name": public_host, "value": public_ip},
+                "ns": {"type": "NS", "name": tunnel_domain, "value": public_host},
             },
             "service": str(config.get("service") or ""),
             "target": str(config.get("target") or "127.0.0.1:22"),
             "tunnel_domain": tunnel_domain,
             "usage": {
                 "summary": (
-                    f"Create A {ns_host} -> {public_ip} and "
-                    f"NS {tunnel_domain} -> {ns_host} on the parent zone."
+                    f"Create A {public_host} -> {public_ip} and "
+                    f"NS {tunnel_domain} -> {public_host} on the parent zone."
                 ),
                 "connect_host": tunnel_domain,
                 "connect_port": public_port,
@@ -739,41 +745,50 @@ class SlowDnsOnlyState:
 
     def service_summary(self) -> List[Dict[str, Any]]:
         services = [
-            "slowdns-api",
-            "slowdns-dnstt",
-            "slowdns-udp53-redirect",
-            "slowdns-expire-sync.timer",
+            ("slowdns-api", ["slowdns-api", "slowdns-only-api"]),
+            ("slowdns-dnstt", ["slowdns-dnstt", "slowdns-only-dnstt"]),
+            ("slowdns-udp53-redirect", ["slowdns-udp53-redirect", "slowdns-only-udp53-redirect"]),
+            ("slowdns-expire-sync.timer", ["slowdns-expire-sync.timer", "slowdns-only-expire-sync.timer"]),
         ]
         if os.name != "posix":
-            return [{"name": service, "active": "unsupported", "enabled": "unsupported"} for service in services]
+            return [{"name": label, "active": "unsupported", "enabled": "unsupported"} for label, _ in services]
         now = time.monotonic()
         with self._state_lock:
             if now - self._service_summary_cached_at < SERVICE_SUMMARY_CACHE_SECONDS and self._service_summary_cache:
                 return [dict(item) for item in self._service_summary_cache]
 
         summary: List[Dict[str, Any]] = []
-        try:
-            active_rows = subprocess.run(
-                ["systemctl", "is-active", *services],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            ).stdout.splitlines()
-            enabled_rows = subprocess.run(
-                ["systemctl", "is-enabled", *services],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            ).stdout.splitlines()
-        except OSError:
-            active_rows = []
-            enabled_rows = []
-        for index, service in enumerate(services):
-            active = active_rows[index].strip() if index < len(active_rows) and active_rows[index].strip() else "unknown"
-            enabled = enabled_rows[index].strip() if index < len(enabled_rows) and enabled_rows[index].strip() else "unknown"
-            summary.append({"name": service, "active": active, "enabled": enabled})
+        for label, candidates in services:
+            active = "unknown"
+            enabled = "unknown"
+            chosen = label
+            try:
+                for candidate in candidates:
+                    active_result = subprocess.run(
+                        ["systemctl", "is-active", candidate],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False,
+                    )
+                    enabled_result = subprocess.run(
+                        ["systemctl", "is-enabled", candidate],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False,
+                    )
+                    candidate_active = active_result.stdout.strip() or active_result.stderr.strip() or "unknown"
+                    candidate_enabled = enabled_result.stdout.strip() or enabled_result.stderr.strip() or "unknown"
+                    if candidate_active != "unknown" or candidate_enabled != "unknown":
+                        chosen = candidate
+                        active = candidate_active
+                        enabled = candidate_enabled
+                        break
+            except OSError:
+                active = "unsupported"
+                enabled = "unsupported"
+            summary.append({"name": chosen, "active": active, "enabled": enabled})
         with self._state_lock:
             self._service_summary_cache = [dict(item) for item in summary]
             self._service_summary_cached_at = now

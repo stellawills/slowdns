@@ -1105,6 +1105,7 @@ render_config() {
     "redirect_53": $redirect_53,
     "local_port": $local_port,
     "target": "127.0.0.1:22",
+    "public_hostname": "$hostname",
     "tunnel_domain": "$tunnel_domain",
     "ns_host": "$ns_host",
     "zone_prefix": "$zone_prefix",

@@ -389,7 +389,7 @@ show_api_result() {
   if [[ -n "$API_ERROR" ]]; then
     printf '  %s  API request failed\n' "$(dot_err)"
     printf '  Error             %s\n' "$API_ERROR"
-    printf '  Hint              slowdns-service restart\n'
+    printf '  Hint              /opt/slowdns/scripts/control.sh restart\n'
     return 1
   fi
   if [[ -z "$API_STATUS" || ! "$API_STATUS" =~ ^[0-9]{3}$ ]]; then

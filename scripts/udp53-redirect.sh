@@ -22,7 +22,7 @@ print("1" if bool(slow.get("redirect_53", False)) else "0")
 PY
 }
 
-add_rule() {
+add_nat_rule() {
   local chain="$1"
   shift
   if ! iptables -t nat -C "$chain" "$@" 2>/dev/null; then
@@ -30,11 +30,27 @@ add_rule() {
   fi
 }
 
-del_rule() {
+add_filter_rule() {
+  local chain="$1"
+  shift
+  if ! iptables -C "$chain" "$@" 2>/dev/null; then
+    iptables -A "$chain" "$@"
+  fi
+}
+
+del_nat_rule() {
   local chain="$1"
   shift
   while iptables -t nat -C "$chain" "$@" 2>/dev/null; do
     iptables -t nat -D "$chain" "$@"
+  done
+}
+
+del_filter_rule() {
+  local chain="$1"
+  shift
+  while iptables -C "$chain" "$@" 2>/dev/null; do
+    iptables -D "$chain" "$@"
   done
 }
 
@@ -53,12 +69,15 @@ main() {
 
   case "$ACTION" in
     start|restart)
-      add_rule PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$listen_port"
+      add_filter_rule INPUT -p udp --dport "$listen_port" -j ACCEPT
+      add_nat_rule PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$listen_port"
       ;;
     stop)
-      del_rule PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$listen_port"
+      del_filter_rule INPUT -p udp --dport "$listen_port" -j ACCEPT
+      del_nat_rule PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$listen_port"
       ;;
     status)
+      iptables -S INPUT | grep -- "--dport $listen_port " || true
       iptables -t nat -S PREROUTING | grep -- "--dport 53 .*--to-ports $listen_port" || true
       ;;
     *)

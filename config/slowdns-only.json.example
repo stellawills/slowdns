@@ -33,6 +33,7 @@
     "redirect_53": true,
     "local_port": 8000,
     "target": "127.0.0.1:22",
+    "public_hostname": "dns.example.com",
     "tunnel_domain": "slowdns.example.com",
     "ns_host": "dns.example.com",
     "zone_prefix": "",
