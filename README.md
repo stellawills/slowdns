@@ -130,8 +130,3 @@ Preferred DNS layout for this standalone service:
 A   dns.example.com        203.0.113.10
 NS  slowdns.example.com   dns.example.com
 ```
-
-Activation server note:
-
-- the public GitHub repo only contains the installer-side activation hook
-- the actual install-code server implementation should stay private on your own backend
