@@ -23,7 +23,7 @@ GO_BOOTSTRAP_VERSION="1.22.12"
 GO_BOOTSTRAP_BASE_URL="https://go.dev/dl"
 GO_BOOTSTRAP_SHA256_AMD64="4fa4f869b0f7fc6bb1eb2660e74657fbf04cdd290b5aef905585c86051b34d43"
 GO_BOOTSTRAP_SHA256_ARM64="fd017e647ec28525e86ae8203236e0653242722a7436929b1f775744e26278e7"
-INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
+INSTALLER_VERSION="${INSTALLER_VERSION:-2026.08.06.1}"
 DEFAULT_LICENSE_URL="https://license.internetshub.com"
 LICENSE_URL="$DEFAULT_LICENSE_URL"
 LICENSE_PRODUCT="slowdns"
@@ -1064,7 +1064,11 @@ render_config() {
   fi
   api_bind="${SLOWDNS_API_BIND:-${existing_api_bind:-127.0.0.1}}"
   api_port="${SLOWDNS_API_PORT:-${existing_api_port:-8091}}"
-  mtu="${SLOWDNS_MTU:-${existing_mtu:-512}}"
+  mtu="${SLOWDNS_MTU:-${existing_mtu:-1232}}"
+  if ! [[ "$mtu" =~ ^[0-9]+$ ]] || (( mtu < 128 || mtu > 1500 )); then
+    echo "SLOWDNS_MTU must be between 128 and 1500." >&2
+    exit 1
+  fi
   zone_prefix="${SLOWDNS_ZONE_PREFIX:-}"
   ns_prefix="${SLOWDNS_NS_PREFIX:-}"
   local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-${existing_local_port:-8000}}"
@@ -1118,8 +1122,25 @@ render_config() {
 JSON
 }
 
+dnstt_binary_valid() {
+  local path="$1"
+  shift
+  local output marker
+  [[ -s "$path" && -x "$path" ]] || return 1
+  output="$("$path" -h 2>&1 || true)"
+  [[ -n "$output" ]] || return 1
+  for marker in "$@"; do
+    [[ "$output" == *"$marker"* ]] || return 1
+  done
+}
+
+dnstt_pair_valid() {
+  dnstt_binary_valid "$BIN_DIR/dnstt-server" "-gen-key" "-udp" "privkey-file" && \
+    dnstt_binary_valid "$BIN_DIR/dnstt-client" "-pubkey-file" "-doh"
+}
+
 build_dnstt() {
-  if [[ -x "$BIN_DIR/dnstt-server" && -x "$BIN_DIR/dnstt-client" ]]; then
+  if dnstt_pair_valid; then
     return
   fi
 
@@ -1127,7 +1148,10 @@ build_dnstt() {
     curl -fsSL "$DNSTT_SERVER_URL" -o "$BIN_DIR/dnstt-server"
     curl -fsSL "$DNSTT_CLIENT_URL" -o "$BIN_DIR/dnstt-client"
     chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
-    return
+    if dnstt_pair_valid; then
+      return
+    fi
+    rm -f "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
   fi
 
   ensure_go
@@ -1157,9 +1181,10 @@ build_dnstt() {
     echo "failed to unpack dnstt source" >&2
     exit 1
   fi
-  (cd "$srcdir/dnstt-server" && "$GO_CMD" build -o "$BIN_DIR/dnstt-server")
-  (cd "$srcdir/dnstt-client" && "$GO_CMD" build -o "$BIN_DIR/dnstt-client")
+  (cd "$srcdir/dnstt-server" && "$GO_CMD" build -trimpath -o "$BIN_DIR/dnstt-server")
+  (cd "$srcdir/dnstt-client" && "$GO_CMD" build -trimpath -o "$BIN_DIR/dnstt-client")
   chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
+  dnstt_pair_valid || { echo "built dnstt binaries failed validation" >&2; exit 1; }
   rm -rf "$DNSTT_BUILD_TMPDIR"
   DNSTT_BUILD_TMPDIR=""
 }
@@ -1184,6 +1209,8 @@ Type=simple
 ExecStart=/opt/slowdns/scripts/run-api.sh
 Restart=always
 RestartSec=2
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -1200,6 +1227,9 @@ Type=simple
 ExecStart=/opt/slowdns/scripts/run-dnstt.sh
 Restart=always
 RestartSec=2
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

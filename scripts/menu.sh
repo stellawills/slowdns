@@ -9,12 +9,13 @@ API_PORT=""
 API_BASE=""
 DOMAIN=""
 PUBLIC_IP=""
+SLOWDNS_MTU=""
 API_RESPONSE=""
 API_STATUS=""
 API_ERROR=""
 API_CONNECT_TIMEOUT="${SLOWDNS_API_CONNECT_TIMEOUT:-3}"
 API_MAX_TIME="${SLOWDNS_API_MAX_TIME:-30}"
-MENU_VERSION="2026.03.30"
+MENU_VERSION="2026.08.06.1"
 
 C_BOLD=$'\033[1m'
 C_RESET=$'\033[0m'
@@ -126,11 +127,14 @@ c = json.load(open(sys.argv[1], encoding="utf-8"))
 print(c.get("port", 8091))
 print(c.get("hostname", ""))
 print(c.get("public_ip", ""))
+slow = c.get("slowdns") or {}
+print(int(slow.get("mtu") or 1232))
 PY
   )
   API_PORT="${cfg[0]:-8091}"
   DOMAIN="${cfg[1]:-}"
   PUBLIC_IP="${cfg[2]:-}"
+  SLOWDNS_MTU="${cfg[3]:-1232}"
   API_BASE="${API_SCHEME}://${API_HOST}:${API_PORT}"
 }
 
@@ -423,6 +427,7 @@ print_header() {
   hr
   printf '  %-12s %s%s%s\n' "Domain" "$C_WHITE" "${DOMAIN:-unknown}" "$C_RESET"
   printf '  %-12s %s%s%s\n' "Public IP" "$C_CYAN" "${PUBLIC_IP:-unknown}" "$C_RESET"
+  printf '  %-12s %s\n' "Server MTU" "${SLOWDNS_MTU:-1232}"
   printf '  %-12s %s\n' "API" "$API_BASE"
   if api_health_ok; then
     printf '  %-12s %s\n' "Status" "$(dot_ok)"
@@ -552,6 +557,43 @@ view_logs() {
   "$SLOWDNS_HOME/scripts/control.sh" logs || true
 }
 
+change_mtu() {
+  local choice mtu body
+  section "SlowDNS MTU"
+  echo
+  printf '  %sCurrent server MTU:%s %s\n' "$C_MUTED" "$C_RESET" "${SLOWDNS_MTU:-1232}"
+  printf '  %sThis setting applies to all users and restarts only dnstt.%s\n' "$C_MUTED" "$C_RESET"
+  echo
+  mi 1 "512"  "Recommended compatibility"
+  mi 2 "1232" "Default / higher throughput"
+  mi 3 "800"  "Balanced compatibility"
+  mi 4 "296"  "Constrained resolver path"
+  mi 5 "Custom" "Choose 128 to 1500"
+  echo
+  mi 0 "Back"
+
+  choice="$(ask)"
+  case "$choice" in
+    1) mtu="512" ;;
+    2) mtu="1232" ;;
+    3) mtu="800" ;;
+    4) mtu="296" ;;
+    5) mtu="$(ask_prompt "Custom MTU [128-1500]")" ;;
+    0) return ;;
+    *) printf '  %sInvalid choice.%s\n' "$C_RED" "$C_RESET"; return ;;
+  esac
+  if ! [[ "$mtu" =~ ^[0-9]+$ ]] || (( mtu < 128 || mtu > 1500 )); then
+    printf '  %sMTU must be between 128 and 1500.%s\n' "$C_RED" "$C_RESET"
+    return
+  fi
+
+  body="$(json_kv "mtu=$mtu")"
+  api_request PATCH "/api/v2/vps/transports/slowdns/mtu" "$body" || true
+  if show_api_result; then
+    load_config
+  fi
+}
+
 main_menu() {
   while true; do
     print_header
@@ -572,6 +614,7 @@ main_menu() {
     mi 9  "Runtime info"      "Domain, ports, DNS records"
     mi 10 "Restart services"  "Restart API and SlowDNS"
     mi 11 "View logs"         "Tail API and dnstt logs"
+    mi 12 "SlowDNS MTU"       "Tune resolver compatibility"
     echo
     mi 0 "Exit"
 
@@ -587,6 +630,7 @@ main_menu() {
       9) print_header; show_runtime_info; pause ;;
       10) print_header; restart_services; pause ;;
       11) print_header; view_logs; pause ;;
+      12) print_header; change_mtu; pause ;;
       0)
         echo
         printf '  %sGoodbye.%s\n\n' "$C_MUTED" "$C_RESET"

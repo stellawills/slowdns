@@ -22,6 +22,8 @@ What it provides:
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
 - private machine-bound install-code activation during install
+- live server MTU management from `slowdns-menu`, with presets and custom values from `128` to `1500`
+- a `1232` new-install default while preserving an existing custom MTU during reinstall
 
 Main compatibility routes:
 
@@ -44,6 +46,7 @@ V2-compatible routes:
 - `GET /api/v2/healthz`
 - `GET /api/v2/vps/runtime`
 - `GET /api/v2/vps/services`
+- `PATCH /api/v2/vps/transports/slowdns/mtu`
 - `GET|POST|PATCH /api/v2/vps/accounts/ssh`
 - `GET|PATCH|DELETE /api/v2/vps/accounts/ssh/{username}`
 - `POST /api/v2/vps/accounts/ssh/trials`
@@ -95,9 +98,11 @@ SLOWDNS_LISTEN_PORT=5300 \
 SLOWDNS_PUBLIC_PORT=53 \
 SLOWDNS_API_BIND=127.0.0.1 \
 SLOWDNS_API_PORT=8091 \
-SLOWDNS_MTU=512 \
+SLOWDNS_MTU=1232 \
 bash install.sh
 ```
+
+After installation, open `slowdns-menu` and choose **SlowDNS MTU**. `512` is the recommended compatibility setting; `1232` is the default for higher throughput, while `800` or `296` can help restricted resolver paths. The change restarts only the dnstt service and applies to all users.
 
 Non-interactive install example:
 
@@ -116,9 +121,12 @@ Service control after install:
 /opt/slowdns/scripts/control.sh start
 /opt/slowdns/scripts/control.sh restart
 /opt/slowdns/scripts/control.sh status
+/opt/slowdns/scripts/control.sh logs
 slowdns-menu
 menu
 ```
+
+Runtime output is handled by systemd/journald. Inspect it with the menu, the control command above, or `journalctl -u slowdns-dnstt -u slowdns-api -n 100 --no-pager`.
 
 Official dnstt reference:
 

@@ -12,7 +12,8 @@ host = str(cfg.get("hostname", "")).strip(".")
 zone_prefix = str(slow.get("zone_prefix", "")).strip(".")
 zone = tunnel_domain or (f"{zone_prefix}.{host}" if zone_prefix else host)
 print(int(slow.get("listen_port", 53)))
-print(int(slow.get("mtu", 512)))
+mtu = int(slow.get("mtu") or 1232)
+print(mtu if 128 <= mtu <= 1500 else 1232)
 print(str(slow.get("private_key_path", "/opt/slowdns/config/server.key")))
 print(zone)
 print(str(slow.get("target", "127.0.0.1:22")))
@@ -25,4 +26,4 @@ PRIVKEY="${VALUES[2]}"
 ZONE="${VALUES[3]}"
 TARGET="${VALUES[4]}"
 
-exec /opt/slowdns/bin/dnstt-server -udp ":${LISTEN_PORT}" -mtu "${MTU}" -privkey-file "${PRIVKEY}" "${ZONE}" "${TARGET}" >>/opt/slowdns/logs/dnstt.log 2>&1
+exec /opt/slowdns/bin/dnstt-server -udp ":${LISTEN_PORT}" -mtu "${MTU}" -privkey-file "${PRIVKEY}" "${ZONE}" "${TARGET}"
