@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import datetime as dt
 import http.server
@@ -18,7 +19,7 @@ import urllib.parse
 from typing import Any
 
 
-APP_VERSION = "2026.04.18"
+APP_VERSION = "2026.08.06.1"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,20}$")
 MAX_BODY_BYTES = 1_048_576
 
@@ -61,7 +62,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tunnel_domain": "",
         "zone_prefix": "dns",
         "ns_prefix": "",
-        "mtu": 512,
+        "mtu": 1232,
         "public_key_path": "/opt/slowdns-only/config/server.pub",
         "private_key_path": "/opt/slowdns-only/config/server.key",
     },
@@ -204,7 +205,7 @@ class SlowDnsOnlyState:
         return conn
 
     def _init_db(self) -> None:
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS account_sshs (
@@ -321,6 +322,7 @@ class SlowDnsOnlyState:
             "listen_port": int(config.get("listen_port", 5300)),
             "public_port": public_port,
             "local_port": int(config.get("local_port", 8000)),
+            "mtu": int(config.get("mtu") or 1232),
             "ns_host": public_host,
             "public_hostname": public_host,
             "public_ip": public_ip,
@@ -341,6 +343,50 @@ class SlowDnsOnlyState:
                 "client_local_host": "127.0.0.1",
                 "client_local_port": int(config.get("local_port", 8000)),
             },
+        }
+
+    def _write_config(self, config: dict[str, Any]) -> None:
+        if self.dry_run:
+            self.config = copy.deepcopy(config)
+            return
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = self.config_path.with_name(f"{self.config_path.name}.tmp")
+        temp_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        os.replace(temp_path, self.config_path)
+        self.config = load_config(self.config_path)
+
+    def update_slowdns_mtu(self, mtu: int) -> dict[str, Any]:
+        if mtu < 128 or mtu > 1500:
+            raise ApiError(400, "mtu must be between 128 and 1500")
+
+        previous = copy.deepcopy(self.config)
+        updated = copy.deepcopy(self.config)
+        slowdns = dict(updated.get("slowdns") or {})
+        slowdns["mtu"] = mtu
+        updated["slowdns"] = slowdns
+        self._write_config(updated)
+
+        service = str(slowdns.get("service") or "slowdns-dnstt")
+        if service.endswith(".service"):
+            service = service[:-8]
+        try:
+            if not self.dry_run:
+                self._ensure_linux()
+                self._run(["systemctl", "restart", f"{service}.service"])
+        except Exception as exc:
+            self._write_config(previous)
+            if not self.dry_run:
+                try:
+                    self._run(["systemctl", "restart", f"{service}.service"])
+                except Exception:
+                    pass
+            raise ApiError(500, f"could not apply SlowDNS MTU: {exc}") from exc
+
+        return {
+            "mtu": mtu,
+            "service": service,
+            "restarted": not self.dry_run,
+            "recommended": 1232,
         }
 
     def _run(self, command: list[str], stdin: str | None = None) -> None:
@@ -406,12 +452,12 @@ class SlowDnsOnlyState:
         self._run(["chpasswd"], stdin=f"{username}:{password}\n")
 
     def fetch_account(self, username: str) -> sqlite3.Row | None:
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             return conn.execute("SELECT * FROM account_sshs WHERE username = ?", (username,)).fetchone()
 
     def list_accounts(self) -> list[dict[str, Any]]:
         self.reconcile_expired_accounts()
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             rows = conn.execute("SELECT * FROM account_sshs ORDER BY username ASC").fetchall()
         return [dict(row) for row in rows]
 
@@ -428,7 +474,7 @@ class SlowDnsOnlyState:
     def reconcile_expired_accounts(self) -> int:
         today = dt.date.today().isoformat()
         updated = 0
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             rows = conn.execute("SELECT username, status_lock FROM account_sshs WHERE date_exp < ?", (today,)).fetchall()
             for row in rows:
                 if str(row["status_lock"]).upper() != "LOCKED":
@@ -505,7 +551,7 @@ class SlowDnsOnlyState:
             days = expired_days
         max_bw, max_bw_hum = quota_to_storage(max_bw_gb)
         self.create_system_user(username, password, expires_on)
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             conn.execute(
                 """
                 INSERT INTO account_sshs (
@@ -531,7 +577,7 @@ class SlowDnsOnlyState:
         return self.build_ssh_payload(username, password, expires_on)
 
     def update_limit_ip(self, limit_ip: int, username: str | None = None) -> dict[str, Any]:
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             if username:
                 cursor = conn.execute(
                     "UPDATE account_sshs SET limit_ip = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?",
@@ -572,7 +618,7 @@ class SlowDnsOnlyState:
             """
             params = (max_bw, max_bw_hum, 1 if reset_bw else 0, 1 if reset_bw else 0)
             changed_user = "ALL"
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             cursor = conn.execute(sql, params)
             conn.commit()
         if cursor.rowcount == 0:
@@ -584,7 +630,7 @@ class SlowDnsOnlyState:
         if not row:
             raise ApiError(404, "account not found")
         self.change_system_password(username, new_password)
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             conn.execute(
                 "UPDATE account_sshs SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?",
                 (new_password, username),
@@ -609,7 +655,7 @@ class SlowDnsOnlyState:
         max_bw_hum = str(row["max_bw_hum"] or "0 GB")
         if kuota_gb is not None:
             max_bw, max_bw_hum = quota_to_storage(kuota_gb)
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             conn.execute(
                 """
                 UPDATE account_sshs
@@ -628,7 +674,7 @@ class SlowDnsOnlyState:
         if not row:
             raise ApiError(404, "account not found")
         self.delete_system_user(username)
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             conn.execute("DELETE FROM account_sshs WHERE username = ?", (username,))
             conn.commit()
         return {"meta": self.build_meta(200, "success", "Account deleted"), "data": {"username": username}}
@@ -643,7 +689,7 @@ class SlowDnsOnlyState:
         else:
             self.unlock_system_user(username, password_override)
         new_state = "LOCKED" if locked else "UNLOCKED"
-        with self.connect() as conn:
+        with contextlib.closing(self.connect()) as conn, conn:
             if password_override:
                 conn.execute(
                     """
@@ -880,6 +926,10 @@ class SlowDnsOnlyHandler(http.server.BaseHTTPRequestHandler):
             return 200, state.runtime_summary(), None
         if route == "/api/v2/vps/services" and method == "GET":
             return 200, {"services": state.service_summary()}, None
+        if route == "/api/v2/vps/transports/slowdns/mtu" and method == "PATCH":
+            mtu = get_int(body, "mtu")
+            result = state.update_slowdns_mtu(mtu)
+            return 200, result, {"message": f"SlowDNS MTU updated to {mtu}"}
         if route == "/api/v2/vps/accounts/ssh/recovery":
             if method == "GET":
                 return 200, {"protocol": "ssh", "accounts": [self._v2_account_row(row) for row in state.list_recovery_accounts()]}, None

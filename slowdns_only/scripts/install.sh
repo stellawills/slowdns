@@ -18,7 +18,7 @@ GO_VERSION="${GO_VERSION:-1.22.12}"
 GO_BIN="${GO_BIN:-go}"
 
 # ── License / Activation ─────────────────────────────────────────
-INSTALLER_VERSION="${INSTALLER_VERSION:-2026.03.30}"
+INSTALLER_VERSION="${INSTALLER_VERSION:-2026.08.06.1}"
 DEFAULT_LICENSE_URL="${DEFAULT_LICENSE_URL:-https://license.internetshub.com}"
 LICENSE_URL="${SLOWDNS_LICENSE_URL:-$DEFAULT_LICENSE_URL}"
 LICENSE_PRODUCT="${SLOWDNS_LICENSE_PRODUCT:-slowdns}"
@@ -603,12 +603,11 @@ copy_project() {
 }
 
 render_config() {
-  local listen_port public_port api_bind api_port mtu local_port redirect_53
+  local listen_port public_port api_bind api_port mtu local_port redirect_53 existing_mtu=""
   listen_port="${SLOWDNS_LISTEN_PORT:-5300}"
   public_port="${SLOWDNS_PUBLIC_PORT:-53}"
   api_bind="${SLOWDNS_API_BIND:-127.0.0.1}"
   api_port="${SLOWDNS_API_PORT:-8091}"
-  mtu="${SLOWDNS_MTU:-512}"
   local_port="${SLOWDNS_CLIENT_LOCAL_PORT:-8000}"
   redirect_53="false"
   if [[ "$public_port" == "53" && "$listen_port" != "53" ]]; then
@@ -616,7 +615,25 @@ render_config() {
   fi
 
   if [[ -f "$CONFIG_DIR/config.json" ]]; then
+    existing_mtu="$(python3 - "$CONFIG_DIR/config.json" <<'PY'
+import json
+import sys
+
+try:
+    config = json.load(open(sys.argv[1], encoding="utf-8"))
+    value = int((config.get("slowdns") or {}).get("mtu") or 0)
+    if 128 <= value <= 1500:
+        print(value)
+except Exception:
+    pass
+PY
+)"
     cp -f "$CONFIG_DIR/config.json" "$CONFIG_DIR/config.json.bak"
+  fi
+  mtu="${SLOWDNS_MTU:-${existing_mtu:-1232}}"
+  if ! [[ "$mtu" =~ ^[0-9]+$ ]] || (( mtu < 128 || mtu > 1500 )); then
+    echo "SLOWDNS_MTU must be between 128 and 1500." >&2
+    exit 1
   fi
 
   cat >"$CONFIG_DIR/config.json" <<JSON
@@ -665,8 +682,25 @@ render_config() {
 JSON
 }
 
+dnstt_binary_valid() {
+  local path="$1"
+  shift
+  local output marker
+  [[ -s "$path" && -x "$path" ]] || return 1
+  output="$("$path" -h 2>&1 || true)"
+  [[ -n "$output" ]] || return 1
+  for marker in "$@"; do
+    [[ "$output" == *"$marker"* ]] || return 1
+  done
+}
+
+dnstt_pair_valid() {
+  dnstt_binary_valid "$BIN_DIR/dnstt-server" "-gen-key" "-udp" "privkey-file" && \
+    dnstt_binary_valid "$BIN_DIR/dnstt-client" "-pubkey-file" "-doh"
+}
+
 build_dnstt() {
-  if [[ -x "$BIN_DIR/dnstt-server" && -x "$BIN_DIR/dnstt-client" ]]; then
+  if dnstt_pair_valid; then
     return
   fi
 
@@ -677,7 +711,10 @@ build_dnstt() {
     cp -f "$BIN_DIR/dnstt-server" "$BIN_DIR/dns-server"
     cp -f "$BIN_DIR/dnstt-client" "$BIN_DIR/dns-client"
     chmod 0755 "$BIN_DIR/dns-server" "$BIN_DIR/dns-client"
-    return
+    if dnstt_pair_valid; then
+      return
+    fi
+    rm -f "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client" "$BIN_DIR/dns-server" "$BIN_DIR/dns-client"
   fi
 
   local tmpdir srcdir
@@ -690,12 +727,13 @@ build_dnstt() {
     echo "failed to unpack dnstt source" >&2
     exit 1
   fi
-  (cd "$srcdir/dnstt-server" && "$GO_BIN" build -o "$BIN_DIR/dnstt-server")
-  (cd "$srcdir/dnstt-client" && "$GO_BIN" build -o "$BIN_DIR/dnstt-client")
+  (cd "$srcdir/dnstt-server" && "$GO_BIN" build -trimpath -o "$BIN_DIR/dnstt-server")
+  (cd "$srcdir/dnstt-client" && "$GO_BIN" build -trimpath -o "$BIN_DIR/dnstt-client")
   chmod 0755 "$BIN_DIR/dnstt-server" "$BIN_DIR/dnstt-client"
   cp -f "$BIN_DIR/dnstt-server" "$BIN_DIR/dns-server"
   cp -f "$BIN_DIR/dnstt-client" "$BIN_DIR/dns-client"
   chmod 0755 "$BIN_DIR/dns-server" "$BIN_DIR/dns-client"
+  dnstt_pair_valid || { echo "built dnstt binaries failed validation" >&2; exit 1; }
   rm -rf "$tmpdir"
 }
 
@@ -732,6 +770,8 @@ Type=simple
 ExecStart=/opt/slowdns-only/scripts/run-api.sh
 Restart=always
 RestartSec=2
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -748,6 +788,9 @@ Type=simple
 ExecStart=/opt/slowdns-only/scripts/run-dnstt.sh
 Restart=always
 RestartSec=2
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

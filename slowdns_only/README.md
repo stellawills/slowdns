@@ -20,6 +20,8 @@ What it provides:
 - standalone SSH account API with legacy and v2-compatible routes
 - system SSH user creation, password rotation, lock/unlock, delete, and expiry sync
 - isolated systemd services and logs
+- live server MTU management from the `slowdns` menu, with presets and custom values from `128` to `1500`
+- a `1232` default for better throughput while preserving an existing custom MTU during reinstall
 - plain-text `slowdns` menu for user management without raw JSON responses
 
 Main compatibility routes:
@@ -77,9 +79,11 @@ SLOWDNS_LISTEN_PORT=5300 \
 SLOWDNS_PUBLIC_PORT=53 \
 SLOWDNS_API_BIND=127.0.0.1 \
 SLOWDNS_API_PORT=8091 \
-SLOWDNS_MTU=512 \
+SLOWDNS_MTU=1232 \
 bash install.sh
 ```
+
+After installation, run `slowdns` and choose **Change SlowDNS MTU**. `1232` is recommended for speed, while `800`, `512`, or `296` can help resolver paths that drop larger DNS packets. Changing it restarts only the standalone dnstt service.
 
 Service control after install:
 
@@ -89,7 +93,10 @@ Service control after install:
 /opt/slowdns-only/scripts/control.sh start
 /opt/slowdns-only/scripts/control.sh restart
 /opt/slowdns-only/scripts/control.sh status
+/opt/slowdns-only/scripts/control.sh logs
 ```
+
+Runtime logs are handled by systemd/journald instead of unbounded append-only files. You can also inspect them directly with `journalctl -u slowdns-dnstt -u slowdns-api -n 100 --no-pager`.
 
 Official dnstt reference:
 

@@ -6,6 +6,7 @@ API_BASE=""
 PUBLIC_HOST=""
 TUNNEL_DOMAIN=""
 PUBLIC_IP=""
+SLOWDNS_MTU=""
 API_RESPONSE=""
 API_STATUS=""
 
@@ -29,12 +30,14 @@ print(f"http://{bind}:{port}")
 print(public_host)
 print(tunnel_domain)
 print(str(cfg.get("public_ip") or ""))
+print(int(slow.get("mtu") or 1232))
 PY
   )
   API_BASE="${VALUES[0]}"
   PUBLIC_HOST="${VALUES[1]}"
   TUNNEL_DOMAIN="${VALUES[2]}"
   PUBLIC_IP="${VALUES[3]}"
+  SLOWDNS_MTU="${VALUES[4]}"
 }
 
 pause() {
@@ -48,7 +51,7 @@ import json
 import sys
 
 payload = {}
-numeric_keys = {"expired", "limitip", "kuota", "expires_in_days", "quota_gb"}
+numeric_keys = {"expired", "limitip", "kuota", "expires_in_days", "quota_gb", "mtu"}
 for item in sys.argv[1:]:
     key, value = item.split("=", 1)
     lowered = value.strip().lower()
@@ -88,6 +91,7 @@ print_header() {
   printf ' Public Host  : %s\n' "${PUBLIC_HOST:-unknown}"
   printf ' Tunnel Domain: %s\n' "${TUNNEL_DOMAIN:-unknown}"
   printf ' Public IP    : %s\n' "${PUBLIC_IP:-unknown}"
+  printf ' Server MTU   : %s\n' "${SLOWDNS_MTU:-1232}"
   printf ' API          : %s\n' "${API_BASE}"
   printf ' Status       : %s\n' "$health"
   echo
@@ -337,6 +341,44 @@ show_dns_info() {
   pause
 }
 
+change_mtu() {
+  local choice mtu body
+  echo
+  echo "SlowDNS Server MTU"
+  echo "------------------------------"
+  echo "1) 1232  Recommended / faster"
+  echo "2) 800   Balanced compatibility"
+  echo "3) 512   High compatibility"
+  echo "4) 296   Constrained resolver path"
+  echo "5) Custom (128-1500)"
+  echo "0) Back"
+  echo
+  read -r -p "Choose: " choice
+  case "$choice" in
+    1) mtu=1232 ;;
+    2) mtu=800 ;;
+    3) mtu=512 ;;
+    4) mtu=296 ;;
+    5)
+      read -r -p "MTU [128-1500]: " mtu
+      if ! [[ "$mtu" =~ ^[0-9]+$ ]] || (( mtu < 128 || mtu > 1500 )); then
+        echo "MTU must be between 128 and 1500."
+        pause
+        return 0
+      fi
+      ;;
+    0) return 0 ;;
+    *) echo "Invalid choice."; pause; return 0 ;;
+  esac
+
+  body="$(json_body "mtu=$mtu")"
+  api_request PATCH /api/v2/vps/transports/slowdns/mtu "$body"
+  require_success "Could not update SlowDNS MTU." || return 0
+  echo
+  echo "SlowDNS MTU changed to $mtu. The dnstt service was restarted."
+  pause
+}
+
 main_menu() {
   while true; do
     print_header
@@ -352,6 +394,7 @@ main_menu() {
     echo "10) Restart services"
     echo "11) View logs"
     echo "12) Show DNS info"
+    echo "13) Change SlowDNS MTU"
     echo "0) Exit"
     echo
     read -r -p "Choose: " choice
@@ -368,6 +411,7 @@ main_menu() {
       10) restart_services ;;
       11) view_logs ;;
       12) show_dns_info ;;
+      13) change_mtu ;;
       0) exit 0 ;;
       *) echo "Invalid choice."; pause ;;
     esac

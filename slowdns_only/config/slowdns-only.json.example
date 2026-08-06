@@ -35,7 +35,7 @@
     "target": "127.0.0.1:22",
     "public_hostname": "dns.example.com",
     "tunnel_domain": "slowdns.example.com",
-    "mtu": 512,
+    "mtu": 1232,
     "public_key_path": "/opt/slowdns-only/config/server.pub",
     "private_key_path": "/opt/slowdns-only/config/server.key"
   }

@@ -26,7 +26,7 @@ case "$ACTION" in
     systemctl status "$TIMER_UNIT" --no-pager || true
     ;;
   logs)
-    tail -n 100 /opt/slowdns-only/logs/api.log /opt/slowdns-only/logs/dnstt.log
+    journalctl -u "$API_UNIT" -u "$DNSTT_UNIT" -n 100 --no-pager
     ;;
   *)
     echo "usage: $0 {start|stop|restart|status|logs}" >&2
