@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+clear
+database="/root/.system"
+
+clear
+# Pastikan file Database ada
+if [[ ! -f "$database" ]]; then
+    touch "$database"
+fi
+clear
+
+mesinssh() {
+clear
+echo " "
+echo " "
+
+if [ -e "/var/log/auth.log" ]; then
+        LOG="/var/log/auth.log";
+fi
+if [ -e "/var/log/secure" ]; then
+        LOG="/var/log/secure";
+fi
+                
+data=( `ps aux | grep -i dropbear | awk '{print $2}'`);
+echo "----------=[ Dropbear User Login ]=-----------";
+echo "ID  |  Username  |  IP Address";
+echo "----------------------------------------------";
+cat $LOG | grep -i dropbear | grep -i "Password auth succeeded" > /tmp/login-db.txt;
+for PID in "${data[@]}"
+do
+        cat /tmp/login-db.txt | grep "dropbear\[$PID\]" > /tmp/login-db-pid.txt;
+        NUM=`cat /tmp/login-db-pid.txt | wc -l`;
+        USER=`cat /tmp/login-db-pid.txt | awk '{print $10}'`;
+        IP=`cat /tmp/login-db-pid.txt | awk '{print $12}'`;
+        if [ $NUM -eq 1 ]; then
+                echo "$PID - $USER - $IP";
+                fi
+done
+echo " "
+echo "----------=[ OpenSSH User Login ]=------------";
+echo "ID  |  Username  |  IP Address";
+echo "----------------------------------------------";
+cat $LOG | grep -i sshd | grep -i "Accepted password for" > /tmp/login-db.txt
+data=( `ps aux | grep "\[priv\]" | sort -k 72 | awk '{print $2}'`);
+
+for PID in "${data[@]}"
+do
+        cat /tmp/login-db.txt | grep "sshd\[$PID\]" > /tmp/login-db-pid.txt;
+        NUM=`cat /tmp/login-db-pid.txt | wc -l`;
+        USER=`cat /tmp/login-db-pid.txt | awk '{print $9}'`;
+        IP=`cat /tmp/login-db-pid.txt | awk '{print $11}'`;
+        if [ $NUM -eq 1 ]; then
+                echo "$PID - $USER - $IP";
+        fi
+done
+if [ -f "/etc/openvpn/server/openvpn-tcp.log" ]; then
+echo ""
+echo "---------=[ OpenVPN TCP User Login ]=---------";
+echo "Username  |  IP Address  |  Connected";
+echo "----------------------------------------------";
+        cat /etc/openvpn/server/openvpn-tcp.log | grep -w "^CLIENT_LIST" | cut -d ',' -f 2,3,8 | sed -e 's/,/      /g' > /tmp/vpn-login-tcp.txt
+        cat /tmp/vpn-login-tcp.txt
+fi
+echo "----------------------------------------------";
+
+if [ -f "/etc/openvpn/server/openvpn-udp.log" ]; then
+echo " "
+echo "---------=[ OpenVPN UDP User Login ]=---------";
+echo "Username  |  IP Address  |  Connected";
+echo "----------------------------------------------";
+        cat /etc/openvpn/server/openvpn-udp.log | grep -w "^CLIENT_LIST" | cut -d ',' -f 2,3,8 | sed -e 's/,/      /g' > /tmp/vpn-login-udp.txt
+        cat /tmp/vpn-login-udp.txt
+fi
+echo "----------------------------------------------";
+echo "";
+}
+
+clear
+echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo -e "     =[ SSH User Login ]=         "
+echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+mulog=$(mesinssh)
+data=( `cat /etc/passwd | grep home | cut -d ' ' -f 1 | cut -d : -f 1`);
+for user in "${data[@]}"
+do
+cekcek=$(echo -e "$mulog" | grep $user | wc -l)
+if [[ $cekcek -gt 0 ]]; then
+echo -e "\e[33;1mUser\e[32;1m  : $user"
+echo -e "\e[33;1mLogin\e[32;1m : $cekcek IP Login "
+echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo "slot" >> /root/.system
+else
+echo > /dev/null
+fi
+sleep 0.1
+done
+aktif=$(cat /root/.system | wc -l)
+echo -e "$aktif User Online"
+echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+sed -i "d" /root/.system

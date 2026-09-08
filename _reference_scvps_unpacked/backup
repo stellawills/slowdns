@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+clear
+
+# Variabel Waktu
+tanggal=$(date +"%m-%d-%Y")
+waktu=$(date +"%H-%M-%S")  # Format aman untuk nama file
+random_code=$(openssl rand -hex 4)
+zip_file="/root/Backup-${random_code}-${tanggal}-${waktu}.zip"
+backup_dir="/root/backup"
+botToken=$(cat /usr/local/etc/v2ray/bot.key)
+chatId=$(cat /usr/local/etc/v2ray/client.id)
+USERNAME="Rerechan02"
+
+# Autentikasi dan Informasi Server
+domain=$(cat /usr/local/etc/v2ray/domain 2>/dev/null || echo "Unknown")
+ipsaya=$(curl -s http://checkip.amazonaws.com)
+asn_info=$(timeout 5 curl -s "http://ip-api.com/json/$ipsaya" | jq -r '.isp // "Unknown ISP"')
+
+# Fungsi Warna Output
+green() { echo -e "\\033[32;1m${*}\\033[0m"; }
+red() { echo -e "\\033[31;1m${*}\\033[0m"; }
+
+echo -e "$(green "Memulai Backup")"
+sleep 1
+
+# Buat Direktori Backup
+rm -rf "$backup_dir"
+mkdir -p "$backup_dir"
+
+# Salin File yang Akan Dibackup
+echo Start Backup
+cp /etc/passwd /root/backup/ &> /dev/null
+cp /etc/group /root/backup/ &> /dev/null
+cp /etc/shadow /root/backup/ &> /dev/null
+cp /etc/gshadow /root/backup/ &> /dev/null
+cp -r /usr/local/etc/v2ray/ /root/backup/v2ray 2>/dev/null
+mkdir -p /root/backup/noobzvpns
+cp /etc/noobzvpns/db_user.json /root/backup/noobzvpns/ 2>/dev/null
+cp /etc/noobzvpns/.noobz.db /root/backup/noobzvpns/ 2>/dev/null
+cd /root
+
+# Buat File ZIP dengan Password
+zip -rP "Rerechan02" "$zip_file" "backup" &> /dev/null
+
+if [[ ! -f "$zip_file" ]]; then
+    echo -e "$(red "Gagal membuat file ZIP.")"
+    exit 1
+fi
+
+# Upload ke Google Drive dengan rclone
+rclone copy "$zip_file" rerechan:backup/
+
+# Dapatkan URL file
+url=$(rclone link rerechan:backup/"$(basename "$zip_file")")
+
+if [[ -z "$url" ]]; then
+    echo -e "$(red "Gagal mendapatkan link backup.")"
+    exit 1
+fi
+
+# Ambil ID file
+backup_id=$(echo "$url" | grep -o 'id=[^&]*' | cut -d'=' -f2)
+link="https://drive.google.com/u/4/uc?id=${backup_id}&export=download"
+
+# Format Pesan Telegram (HTML)
+message="✅ <b>Backup Berhasil!</b>
+
+🆔 <b>ID Backup:</b>
+<pre>$backup_id</pre>
+
+🖥 <b>Informasi Server:</b>
+📛 <b>Nama Pengguna:</b> $USERNAME
+🌐 <b>Domain:</b> $domain
+🏢 <b>ISP:</b> $asn_info
+🌍 <b>IP VPS:</b> <pre>$ipsaya</pre>
+⏰ <b>Waktu Backup:</b> $tanggal pukul $waktu
+
+📥 <b>Unduh Backup:</b>
+<pre>$link</pre>
+
+🔹 <i>File backup telah tersimpan di Google Drive.</i>
+🔹 <i>Simpan ID backup ini untuk referensi pemulihan di masa mendatang.</i>
+
+🔒 <b>Keamanan:</b> File backup dilindungi dengan password.
+🔄 Proses backup ini dilakukan secara otomatis untuk menjaga data Anda tetap aman.
+
+✨ <b>Terima kasih telah menggunakan layanan kami!</b>"
+
+# Kirim pesan ke Telegram
+curl -s -X POST "https://api.telegram.org/bot$botToken/sendMessage" \
+     -d "chat_id=$chatId" \
+     --data-urlencode "text=$message" \
+     -d "parse_mode=HTML"  &> /dev/null
+
+# Tampilkan Detail ke CLI
+clear
+echo -e "$(green "Backup dan pengiriman pesan ke Telegram selesai.")"
+echo -e "$(green "Detail Backup:")"
+echo -e "🆔 ID Backup: $backup_id"
+echo -e "🖥 Informasi Server:"
+echo -e "┣ 📛 Nama Pengguna: $USERNAME"
+echo -e "┣ 🌐 Domain: $domain"
+echo -e "┣ 🏢 ISP: $asn_info"
+echo -e "┣ 🌍 IP VPS: $ipsaya"
+echo -e "┣ ⏰ Waktu Backup: $tanggal pukul $waktu"
+echo -e "┗━━━━━━━━━━━━━━━━━"
+echo -e "📥 Unduh Backup: $link"
+echo -e "🔒 Keamanan: File backup dilindungi dengan password."
+echo -e "🔄 Proses backup ini dilakukan secara otomatis untuk menjaga data Anda tetap aman."

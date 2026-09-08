@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+telegram_bot_token=$(cat /usr/local/etc/v2ray/bot.key)
+telegram_chatid=$(cat /usr/local/etc/v2ray/client.id)
+domain=$(cat /usr/local/etc/v2ray/domain)
+
+clear
+echo -e "
+────────────────────────────
+Add Account NoobzVPN
+────────────────────────────"
+read -p "Username  : " user
+#read -p "Password  : " pass
+read -p "Limit Device: " device
+read -p "Limit Badwidth: " bw
+read -p "Masa Aktif: " masaaktif
+clear
+pass="fn-project.com"
+noobzvpns add --password "$pass" "$user" --bandwidth $bw --devices $device --expired $masaaktif
+expi=`date -d "$masaaktif days" +"%Y-%m-%d"`
+
+#Simpan Database
+DATADB=$(cat /etc/noobzvpns/.noobz.db | grep "^#noobzvpns#" | grep -w "${user}" | awk '{print $2}')
+if [[ "${DATADB}" != '' ]]; then
+  sed -i "/\b${user}\b/d" /etc/noobzvpns/.noobz.db
+fi
+echo "#noobzvpns# ${user} ${pass} ${expi}" >>/etc/noobzvpns/.noobz.db
+clear
+
+#Notif Telegram
+TEKS="───────────────────────────
+<b>NoobzVPN Account</b>
+<b>────────────────────────────</b>
+<b>Hostname  :</b> <code>$domain</code>
+<b>Username  :</b> <code>${user}@fn-project</code>
+<b>Password  :</b> <code>fn-project.com</code>
+<b>────────────────────────────</b>
+<b>Limit Device:</b> <code>$device</code>
+<b>Limit Badwidth:</b> <code>$bw</code> <b>GB</b>
+<b>────────────────────────────</b>
+<b>HTTP      :</b> <code>80, 2082</code>
+<b>HTTP(S)   :</b> <code>443</code>
+<b>────────────────────────────</b>
+<b>PAYLOAD   :</b> <code>GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]</code>
+<b>────────────────────────────</b>
+<b>Expired   :</b> <code>$expi</code>
+<b>────────────────────────────</b>
+"
+curl -s -X POST "https://api.telegram.org/bot$telegram_bot_token/sendMessage" \
+    -d "chat_id=$telegram_chatid" \
+    -d "parse_mode=HTML" \
+    -d "text=$TEKS" > /dev/null
+
+clear
+echo -e "
+╔────────────────────────────╗
+ NoobzVPN Account
+ ────────────────────────────
+ Hostname  : $domain
+ Username  : ${user}@fn-project
+ Password  : fn-project.com
+ ────────────────────────────
+ Limit Device: $device
+ Limit Badwidth: $bw GB
+ ────────────────────────────
+ HTTP      : 80, 2082
+ HTTP(S)   : 443
+ ────────────────────────────
+ PAYLOAD   : GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
+ ────────────────────────────
+ Expired   : $expi
+╚────────────────────────────╝"

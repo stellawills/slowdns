@@ -1,0 +1,23 @@
+#!/bin/bash
+
+clear
+
+echo -e "────────────────────────────"
+echo -e "      Menu SSH WebSocket      "
+echo -e "────────────────────────────"
+echo -e "1. Create SSH Account "
+echo -e "2. Renew SSH Account
+echo -e "3. Cek    SSH Login "
+echo -e "4. Delete SSH Account "
+echo -e "────────────────────────────"
+echo -e "0. Back To Main Menu "
+echo -e "────────────────────────────"
+read -p "Input Options: " opw
+case $opw in
+1) add-ssh ;;
+2) renew-ssh ;;
+3) cek-ssh ;;
+4) del-ssh ;;
+0) menu ;;
+*) menu-ssh ;;
+esac

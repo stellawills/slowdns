@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+JSON_FILE="/etc/noobzvpns/db_user.json"  
+
+# Warna terminal  
+RED='\033[0;31m'  
+GREEN='\033[0;32m'  
+BOLD='\033[1m'  
+NC='\033[0m'  
+
+get_expired_date() {  
+  local issued="$1"  
+  local expired="$2"  
+  local issued_timestamp  
+  local expired_timestamp  
+  local expired_date  
+
+  issued_timestamp=$(date --date="$issued" +%s 2>/dev/null)  
+
+  if [ $? -ne 0 ]; then  
+    echo "Invalid Date"  
+    return  
+  fi  
+
+  expired_timestamp=$((issued_timestamp + expired * 86400)) # 86400 detik per hari  
+  expired_date=$(date -d "@$expired_timestamp" "+%Y-%m-%d %H:%M:%S")  
+
+  echo "$expired_date"  
+}  
+
+convert_bandwidth() {  
+  local bandwidth="$1"  
+
+  if [ "$bandwidth" -ge 1024 ]; then  
+    echo "$(echo "scale=2; $bandwidth / 1024" | bc) TB"  
+  else  
+    echo "$bandwidth GB"  
+  fi  
+}  
+
+get_blocked_status() {  
+  local blocked="$1"  
+
+  if [ "$blocked" == "true" ]; then  
+    echo -e "${RED}true${NC}"  
+  else  
+    echo -e "${GREEN}false${NC}"  
+  fi  
+}  
+
+display_user_info() {  
+  local user="$1"  
+  local password="$2"  
+  local blocked="$3"  
+  local devices="$4"  
+  local bandwidth="$5"  
+  local expired="$6"  
+
+  echo -e "${BOLD}Username         :${NC} $user"  
+  echo -e "Password         : $password"  
+  echo -e "Blocked          : $blocked"  
+  echo -e "Limit Device     : $devices Device"  
+  echo -e "Limit Bandwidth  : $bandwidth"  
+  echo -e "Expired          : $expired"  
+  echo -e "------------------------------"  
+}  
+
+check_json_file() {  
+  if [ ! -f "$JSON_FILE" ]; then  
+    echo -e "${RED}404 Not Found${NC}: File Database Not Found${NC}"  
+    echo -e "${RED}API Response${NC}: {\"error\": \"File not found\"}${NC}"  
+    exit 1  
+  fi  
+
+  if [ ! -s "$JSON_FILE" ]; then  
+    echo -e "${RED}404 Not Found${NC}: File is empty${NC}"  
+    echo -e "${RED}API Response${NC}: {\"error\": \"File is empty\"}${NC}"  
+    exit 1  
+  fi  
+
+  if ! jq empty "$JSON_FILE" 2>/dev/null; then  
+    echo -e "${RED}404 Not Found${NC}: Invalid JSON format${NC}"  
+    echo -e "${RED}API Response${NC}: {\"error\": \"Invalid JSON format\"}${NC}"  
+    exit 1  
+  fi  
+
+  echo -e "${GREEN}200 OK${NC}: File found and valid${NC}"  
+}  
+
+list_accounts() {  
+  clear  
+  check_json_file  
+
+  echo -e "${BOLD}List Account Noobzvpns${NC}"  
+  echo "==========================="  
+
+  jq -r '.users | to_entries[] | [.key, .value.password, .value.blocked, .value.devices, .value.bandwidth, .value.expired, .value.issued] | @tsv' "$JSON_FILE" |  
+  while IFS=$'\t' read -r user password blocked devices bandwidth expired issued; do  
+
+    expired_date=$(get_expired_date "$issued" "$expired")  
+
+    bw=$(convert_bandwidth "$bandwidth")  
+
+    block_status=$(get_blocked_status "$blocked")  
+
+    display_user_info "$user" "$password" "$block_status" "$devices" "$bw" "$expired_date"  
+  done  
+}  
+
+check_username_validity() {  
+  local username="$1"  
+
+  if jq -e --arg user "$username" '.users[$user]' "$JSON_FILE" > /dev/null; then  
+    echo -e "${GREEN}200 OK${NC}: Username found"  
+  else  
+    echo -e "${RED}404 Not Found${NC}: Username not found"  
+    exit 1  
+  fi  
+}  
+
+dp1() {
+  user=$1
+  domain=$(cat /usr/local/etc/v2ray/domain)
+
+  # Ambil data dari JSON
+  user_data=$(jq -r --arg user "$user" '.users[$user]' "$JSON_FILE")
+  password=$(echo "$user_data" | jq -r '.password')
+  devices=$(echo "$user_data" | jq -r '.devices')
+  bandwidth=$(echo "$user_data" | jq -r '.bandwidth')
+  expired=$(echo "$user_data" | jq -r '.expired')
+  issued=$(echo "$user_data" | jq -r '.issued')
+
+  expired_date=$(get_expired_date "$issued" "$expired")
+  bandwidth_human=$(convert_bandwidth "$bandwidth")
+  clear
+  echo -e "
+────────────────────────────
+NoobzVPN Account
+────────────────────────────
+Hostname         : $domain
+Username         : ${user}@fn-project
+Password         : $password
+────────────────────────────
+Limit Device     : $devices
+Limit Bandwidth  : $bandwidth_human
+Expired          : $expired_date
+────────────────────────────
+HTTP             : 80, 2082
+HTTP(S)          : 443
+────────────────────────────
+PAYLOAD          : GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
+────────────────────────────"
+}
+
+list_accounts  
+read -p "Input Username: " username  
+check_username_validity $username  
+while true; do  
+  read -rp "Display $username (y/n): " dp  
+  if [[ -z "$dp" ]]; then  
+    echo -e "${RED}Invalid input${NC}: No input provided."  
+    continue  
+  fi  
+
+  case "$dp" in  
+    y|Y)  
+      dp1 "$username"  
+      break  
+      ;;  
+    n|N)  
+      echo -e "${GREEN}Canceled by user.${NC}"  
+      exit 0  
+      ;;  
+    *)  
+      echo -e "${RED}Invalid input${NC}: Please enter y or n."  
+      ;;  
+  esac  
+done

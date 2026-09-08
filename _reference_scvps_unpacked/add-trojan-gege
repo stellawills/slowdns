@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+telegram_bot_token=$(cat /usr/local/etc/v2ray/bot.key)
+telegram_chatid=$(cat /usr/local/etc/v2ray/client.id)
+
+red() { echo -e "\\033[32;1m${*}\\033[0m"; }
+domain=$(cat /usr/local/etc/v2ray/domain)
+clear
+until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${user_EXISTS} == '0' ]]; do
+    echo -e "───────────────────────────"
+    echo -e "  Add Xray/Trojan Account  "
+    echo -e "───────────────────────────"
+
+    read -rp "User: " -e user
+    user_EXISTS=$(grep -w $user /usr/local/etc/v2ray/config.json | wc -l)
+
+    if [[ ${user_EXISTS} == '1' ]]; then
+        clear
+        echo -e "───────────────────────────"
+        echo -e "  Add Xray/Trojan Account  "
+        echo -e "───────────────────────────"
+        echo ""
+        echo "please choose another name."
+        echo ""
+        echo -e "───────────────────────────"
+        read -n 1 -s -r -p "Press any key to back on menu"
+        menu
+    fi
+done
+#uuid=$(cat /proc/sys/kernel/random/uuid)
+read -p "Expired (days): " masaaktif
+read -p "Input Password (Empty Default): " password
+# Validasi Password
+if [[ -z "$password" || "$password" =~ [[:space:]] || ${#password} -lt 5 ]]; then
+    password=$(cat /proc/sys/kernel/random/uuid)
+    echo "Generated new password: $password"
+else
+    echo "Using provided password: $password"
+fi
+exp=$(date -d "$masaaktif days" +"%Y-%m-%d")
+sed -i '/#trojan$/a\#! '"$user $exp"'\
+},{"password": "'""$password""'","email": "'""$user""'"' /usr/local/etc/v2ray/config.json
+systemctl restart v2ray
+trojanlink="trojan://${password}@${domain}:443?path=%2Ftrojan-ws&security=tls&host=${domain}&type=ws&sni=${domain}#${user}"
+trojanlink1="trojan://${password}@${domain}:443?mode=gun&security=tls&type=grpc&serviceName=trojan-grpc&sni=${domain}#${user}"
+
+TEKS=$(cat <<EOF
+<b>───────────────────</b>
+  TROJAN ACCOUNT
+<b>───────────────────</b>
+<b>Remarks    : </b><code>${user}</code>
+<b>Host/IP    : </b><code>${domain}</code>
+<b>port       : </b><code>443</code>
+<b>Password   : </b><code>${password}</code>
+<b>Encryption : </b><code>none</code>
+<b>Path       : </b><code>/trojan</code>
+<b>ServiceName: </b><code>trojan-grpc</code>
+<b>───────────────────</b>
+<b>Link WS   :</b>
+<pre>${trojanlink}</pre>
+<b>───────────────────</b>
+<b>Link GRPC :</b>
+<pre>${trojanlink1}</pre>
+<b>───────────────────</b>
+<b>Expired On : </b><code>$exp</code>
+<b>───────────────────</b>
+EOF
+)
+
+curl -s -X POST "https://api.telegram.org/bot$telegram_bot_token/sendMessage" \
+    -d "chat_id=$telegram_chatid" \
+    -d "parse_mode=HTML" \
+    --data-urlencode "text=$TEKS" > /dev/null
+
+clear
+echo -e "╔───────────────────╗"
+echo -e "   TROJAN ACCOUNT"
+echo -e " ───────────────────"
+echo -e " Remarks    : ${user}"
+echo -e " Host/IP    : ${domain}"
+echo -e " port       : 443"
+echo -e " Password   : $password"
+echo -e " Encryption : none"
+echo -e " Path       : /trojan"
+echo -e " ServiceName: trojan-grpc"
+echo -e " ───────────────────"
+echo -e " Link WS   : ${trojanlink}"
+echo -e " ───────────────────"
+echo -e " Link GRPC : ${trojanlink1}"
+echo -e " ───────────────────"
+echo -e " Expired On : $exp"
+echo -e "╚───────────────────╝"
+echo ""

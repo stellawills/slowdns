@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+[[ -e $(which curl) ]] && grep -q "1.1.1.1" /etc/resolv.conf || { 
+    echo "nameserver 1.1.1.1" | cat - /etc/resolv.conf >> /etc/resolv.conf.tmp && mv /etc/resolv.conf.tmp /etc/resolv.conf
+}
+
+# Color
+white='\e[037;1m'
+RED='\e[31m'
+GREEN='\e[32m'
+NC='\033[0;37m'
+
+clear
+domain=$(cat /etc/xray/domain)
+KEY=$(cat /etc/funny/bot/notif/bot.key)
+CHATID=$(cat /etc/funny/bot/notif/client.id)
+database="/etc/noobzvpns/.noobz.db"
+
+clear
+# Pastikan file Database ada
+if [[ ! -f "$database" ]]; then
+    touch "$database"
+fi
+
+function list() {
+function format_output() { 
+    echo "=========================================="
+    echo "       Informasi Akun NoobzVPN           "
+    echo "=========================================="
+
+    echo "$1" | jq -c '.users[]' | while read -r line; do
+        username=$(echo "$line" | jq -r '.username')
+        status=$(echo "$line" | jq -r '.status')
+        password=$(echo "$line" | jq -r '.password')
+        blocked=$(echo "$line" | jq -r '.blocked')
+        issued=$(echo "$line" | jq -r '.issued')
+        bandwidth=$(echo "$line" | jq -r '.bandwidth')
+        devices=$(echo "$line" | jq -r '.devices')
+        bytes_usage=$(echo "$line" | jq -r '.statistic.bytes_usage')
+        device_online=$(echo "$line" | jq -r '.statistic.device_online')
+
+        # Ambil hanya bagian tanggal (YYYY-MM-DD) dari issued
+        issued_date=$(echo "$issued" | awk '{print $1}')
+        
+        # Hitung expired date dengan format yang benar
+        expired=$(date -d "$issued_date +30 days" '+%Y-%m-%d' 2>/dev/null)
+        if [ -z "$expired" ]; then
+            expired="Invalid Date"
+        fi
+
+        echo "Username : $username"
+        echo "Status   : $status"
+        echo "Password : $password"
+        if [ "$blocked" == "true" ]; then
+            echo -e "Blocked  : \033[1;31m${blocked}${white}"  # Merah jika true
+        else
+            echo -e "Blocked  : \033[1;32m${blocked}${white}"  # Hijau jika false
+        fi
+        echo "Expired  : $expired"
+        echo "Bandwidth: $bandwidth"
+        echo "Devices  : $devices"
+        echo "Usage    : $bytes_usage"
+        echo "Online   : $device_online"
+        echo "-------------------------------------"
+    done
+
+    echo "=========================================="
+    echo "           Akhir Informasi                "
+    echo "=========================================="
+}
+
+function list() { 
+    output=$(noobzvpns print-all | awk '
+    BEGIN {
+        print "{\n  \"users\": ["
+        first = 1
+    }
+    {
+        if ($0 ~ /^[0-9]+\./) {
+            if (!first) print "    },"
+            first = 0
+            split($0, user_info, " -> ")
+            username = user_info[1]
+            status = user_info[2]
+            print "    {"
+            print "      \"username\": \"" username "\","
+            print "      \"status\": \"" status "\","
+        } else if ($1 == "-password") {
+            print "      \"password\": \"" $3 "\","
+        } else if ($1 == "-blocked") {
+            print "      \"blocked\": " $3 ","
+        } else if ($1 == "-issued") {
+            print "      \"issued\": \"" $3 " " $4 " " $5 "\","
+        } else if ($1 == "-bandwidth") {
+            print "      \"bandwidth\": \"" $3 " " $4 "\","
+        } else if ($1 == "-devices") {
+            print "      \"devices\": \"" $3 " " $4 "\","
+        } else if ($2 == "usage") {
+            total_usage = $11 " " $12
+        } else if ($1 == "-device" && $2 == "online") {
+            print "      \"statistic\": {"
+            print "        \"bytes_usage\": \"" total_usage "\","
+            print "        \"device_online\": \"" $4 "\""
+            print "      }"
+        }
+    }
+    END {
+        print "    }\n  ]\n}"
+    }')
+
+    format_output "$output"
+}
+
+list
+}
+
+function delete() {
+mna=$(list)
+clear
+echo -e "
+$mna
+"
+read -p "Input Name: " name
+
+if [[ -z "$name" ]]; then
+    menu
+else
+    # Ambil data dari database
+    db_file="/etc/noobzvpns/.noobz.db"
+    entry=$(grep "^#noobzvpns#" "$db_file" | grep -w "$name")
+
+    if [[ -z "$entry" ]]; then
+        echo "User $name tidak ditemukan di database!"
+        exit 1
+    fi
+
+    expi=$(echo "$entry" | awk '{print $4}')
+    limit=$(echo "$entry" | awk '{print $3}')
+
+    # Hapus user dari database
+    sed -i "/^#noobzvpns# $name $limit $expi/d" "$db_file"
+    
+    # Hapus user dari sistem NoobzVPNs
+    noobzvpns remove "$name"
+
+    echo "User $name berhasil dihapus!"
+clear
+TEKS="
+════════════════════════════
+Username Delete
+════════════════════════════
+
+User: $name
+════════════════════════════
+"
+TIME="10"
+URL="https://api.telegram.org/bot$KEY/sendMessage"
+curl -s --max-time $TIME -d "chat_id=$CHATID&text=$TEKS" $URL > /dev/null
+clear
+echo "$TEKS"
+fi
+}
+
+function unlock() {
+mna=$(list)
+clear
+echo -e "
+$mna
+"
+read -p "Input Name: " name
+
+if [[ -z "$name" ]]; then
+    menu
+else
+    # Ambil data dari database
+    db_file="/etc/noobzvpns/.noobz.db"
+    entry=$(grep "^#noobzvpns#" "$db_file" | grep -w "$name")
+
+    if [[ -z "$entry" ]]; then
+        echo "User $name tidak ditemukan di database!"
+        exit 1
+    fi
+
+    expi=$(echo "$entry" | awk '{print $4}')
+    limit=$(echo "$entry" | awk '{print $3}')
+
+    # Hapus user dari sistem NoobzVPNs
+    noobzvpns unblock "$name"
+
+    echo "User $name berhasil diunblock!"
+clear
+TEKS="
+════════════════════════════
+Username Unblock
+════════════════════════════
+
+User: $name
+════════════════════════════
+"
+TIME="10"
+URL="https://api.telegram.org/bot$KEY/sendMessage"
+curl -s --max-time $TIME -d "chat_id=$CHATID&text=$TEKS" $URL > /dev/null
+clear
+echo "$TEKS"
+fi
+}
+
+function main() {
+domain=$(cat /etc/xray/domain)
+clear
+if [[ $(systemctl status noobzvpns | grep -w Active | awk '{print $2}' | sed 's/(//g' | sed 's/)//g' | sed 's/ //g') == 'active' ]]; then
+    status="${GREEN}ON${NC}";
+else
+    status="${RED}OFF${NC}";
+fi
+clear
+echo -e "════════════════════════════════"
+echo -e "[ <== ${white}NOOBZVPN ==> ]${white}"
+echo "════════════════════════════════"
+echo -e "Noobz: $status
+${white}
+
+1.  Add     NoobzVPN   Account
+2.  Change  Password   Account
+3.  Change  Username   Account
+4.  Change  Bandwidth  Limit Account
+5.  Change  Device     Limit Account
+6.  Extend  Expired    Account
+7.  Unblock & Block    Account
+8.  Delete  & Remove   Account
+9.  Reset   Bandwidth & Device Login
+10. List    Total      Account
+11. Check   Config     Account
+12. Check   User       Login"
+echo "════════════════════════════════"
+echo "Preess CTRL or X to exit"
+echo "════════════════════════════════"
+read -p "Input Option: " inrere
+case $inrere in
+1|01) add-noobz ;;
+2|02) cpw-noobz ;;
+3|03) cpu-noobz ;;
+4|04) cpb-noobz ;;
+5|05) cpi-noobz ;;
+6|06) ex-noobz ;;
+7|07) ubl-noobz ;;
+8|08) delete ;;
+9|09) rbd-noobz ;;
+10) list-noobz ;;
+11) config-noobz ;;
+12) cek-login-noobz ;;
+0|00) menu ;;
+x|X) exit 1 ;;
+*) echo "Wrong Number " ; main ;;
+esac
+}
+
+main

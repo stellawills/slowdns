@@ -1,0 +1,25 @@
+#!/bin/bash
+
+clear
+
+echo -e "────────────────────────────"
+echo -e "      Menu V2ray Vmess      "
+echo -e "────────────────────────────"
+echo -e "1. Create Vmess Account "
+echo -e "2. Cek    Vmess Login "
+echo -e "3. Delete Vmess Account "
+echo -e "4. Renew  Vmess Account "
+echo -e "5. Trafik Vmess Account "
+echo -e "────────────────────────────"
+echo -e "0. Back To Main Menu "
+echo -e "────────────────────────────"
+read -p "Input Options: " opw
+case $opw in
+1) add-vmess ;;
+2) cek-vmess ;;
+3) del-vmess ;;
+4) renew-vmess ;;
+5) trafik-vmess ;;
+0) menu ;;
+*) menu-vmess ;;
+esac

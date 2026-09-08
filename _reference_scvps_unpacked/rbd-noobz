@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+# Lokasi file database JSON
+JSON_FILE="/etc/noobzvpns/db_user.json"
+
+# Warna terminal
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Mengecek apakah file JSON ada dan valid
+check_json_file() {
+  if [ ! -f "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File Database Not Found"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File not found\"}"
+    exit 1
+  fi
+
+  if [ ! -s "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File is empty"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File is empty\"}"
+    exit 1
+  fi
+
+  if ! grep -q '"users"' "$JSON_FILE"; then
+    echo -e "${RED}404 Not Found${NC}: Invalid JSON format"
+    echo -e "${RED}API Response${NC}: {\"error\": \"Invalid JSON format\"}"
+    exit 1
+  fi
+}
+
+# Menampilkan daftar username yang ada di database menggunakan noobzvpns print-all
+list_usernames() {
+  echo -e "${BOLD}List of Users in Database:${NC}"
+  noobzvpns print-all
+}
+
+# Memeriksa apakah username ada di database JSON
+check_username_exists() {
+  local username="$1"
+  if ! jq -e --arg u "$username" '.users[$u]' "$JSON_FILE" &>/dev/null; then
+    echo -e "${RED}Username not found${NC}: $username"
+    exit 1
+  fi
+}
+
+# Reset untuk username tertentu menggunakan perintah noobzvpns
+reset_user_with_noobzvpns() {
+  local username="$1"
+  check_username_exists "$username"
+  noobzvpns reset "$username" &>/dev/null
+  echo -e "
+${GREEN}Success Reset${NC}
+================
+Username: ${CYAN}${username}@fn-project${NC}
+Status  : ${BOLD}Reset${NC}
+================"
+}
+
+# Reset semua akun di database menggunakan perintah noobzvpns
+reset_all_with_noobzvpns() {
+  noobzvpns opts --reset-all &>/dev/null
+  echo -e "
+${GREEN}Success Reset${NC}
+================
+Username: ${CYAN}All Account on Database${NC}
+Status  : ${BOLD}Reset${NC}
+================"
+}
+
+# Fungsi interaktif untuk mereset akun
+interactive_reset() {
+  clear
+  check_json_file
+
+  # Menampilkan daftar username yang ada di database menggunakan perintah noobzvpns print-all
+  list_usernames
+  echo -e "======================"
+  echo -e "Format Reset"
+  echo -e "======================"
+  echo -e "username = Reset Username"
+  echo -e "all = Reset All Usernames"
+  echo -e "======================"
+
+  # Meminta input format reset
+  read -rp "Input Reset Format: " format
+
+  case "$format" in
+    username)
+      read -p "Input Username For Reset: " username
+      reset_user_with_noobzvpns "$username"
+      ;;
+    all)
+      reset_all_with_noobzvpns
+      ;;
+    *)
+      echo -e "${RED}Invalid input${NC}: Only 'username' or 'all' are supported."
+      ;;
+  esac
+}
+
+# Main script untuk memproses input
+main() {
+  case "$1" in
+    reset)
+      if [[ -z "$2" ]]; then
+        interactive_reset
+      else
+        reset_user_with_noobzvpns "$2"
+      fi
+      ;;
+    opts)
+      if [[ "$2" == "--reset-all" ]]; then
+        reset_all_with_noobzvpns
+      else
+        echo -e "${RED}Unknown option${NC}: $2"
+        exit 1
+      fi
+      ;;
+    *)
+      interactive_reset
+      ;;
+  esac
+}
+
+main "$@"

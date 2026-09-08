@@ -8,6 +8,17 @@ const SLOWDNS_MAX_ACTIVATIONS_PER_CODE = 5;
 // Install-token lifetime in seconds (10 minutes to accommodate slow VPS builds).
 const SLOWDNS_TOKEN_TTL = 600;
 
+// Precheck-token lifetime in seconds (enough time to finish the prompts after code validation).
+const SLOWDNS_PRECHECK_TTL = 900;
+
+// Browser-session lifetime for the public /slowdns page.
+const SLOWDNS_BROWSER_SESSION_TTL = 1800;
+
+// Retention windows for operational cleanup.
+const SLOWDNS_EXPIRED_CODE_RETENTION_DAYS = 7;
+const SLOWDNS_RELEASED_ACTIVATION_RETENTION_DAYS = 30;
+const SLOWDNS_CONFIRMED_ACTIVATION_RETENTION_DAYS = 90;
+
 // --- Schema -------------------------------------------------------------------
 
 function slowdns_schema_ensure(): void {
@@ -120,7 +131,7 @@ function slowdns_token_sign(array $payload): string {
     return $message . '.' . slowdns_base64url_encode($signature);
 }
 
-function slowdns_token_verify(string $token): array {
+function slowdns_token_verify(string $token, bool $enforceExpiry = true): array {
     $parts = explode('.', $token);
     if (count($parts) !== 3) {
         throw new RuntimeException('Install token format is invalid.');
@@ -135,9 +146,156 @@ function slowdns_token_verify(string $token): array {
     if (!is_array($payload)) {
         throw new RuntimeException('Install token payload is invalid.');
     }
-    if ((int) ($payload['exp'] ?? 0) < time()) {
+    if ($enforceExpiry && (int) ($payload['exp'] ?? 0) < time()) {
         throw new RuntimeException('Install token has expired.');
     }
+    return $payload;
+}
+
+function slowdns_client_fingerprint(): array {
+    $ip = client_ip();
+    $ua = trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
+    return [
+        'ip' => $ip,
+        'ip_hash' => hash('sha256', $ip),
+        'ua' => $ua,
+        'ua_hash' => hash('sha256', $ua),
+    ];
+}
+
+function slowdns_code_hint(string $code): string {
+    $code = strtoupper(trim($code));
+    if (strlen($code) <= 12) {
+        return $code;
+    }
+    return substr($code, 0, 10) . '...' . substr($code, -6);
+}
+
+function slowdns_audit_detail(array $data): string {
+    return json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '';
+}
+
+function slowdns_issue_browser_token(): string {
+    $fingerprint = slowdns_client_fingerprint();
+    $issuedAt = time();
+    $payload = [
+        'iss' => slowdns_issuer(),
+        'typ' => 'slowdns_browser',
+        'sub' => 'browser_session',
+        'ip' => $fingerprint['ip_hash'],
+        'ua' => $fingerprint['ua_hash'],
+        'iat' => $issuedAt,
+        'exp' => $issuedAt + SLOWDNS_BROWSER_SESSION_TTL,
+        'jti' => bin2hex(random_bytes(8)),
+    ];
+    return slowdns_token_sign($payload);
+}
+
+function slowdns_set_browser_cookie(): void {
+    $token = slowdns_issue_browser_token();
+    $https = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    $secure = $https || $forwardedProto === 'https';
+    setcookie('slowdns_browser', $token, [
+        'expires' => time() + SLOWDNS_BROWSER_SESSION_TTL,
+        'path' => '/',
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+function slowdns_require_browser_session(): array {
+    $token = trim((string) ($_COOKIE['slowdns_browser'] ?? ''));
+    if ($token === '') {
+        v2_error(403, 'browser_session_required', 'Open the SlowDNS page first before requesting an install code.');
+    }
+
+    try {
+        $payload = slowdns_token_verify($token);
+    } catch (Throwable $e) {
+        v2_error(403, 'browser_session_invalid', 'Refresh the SlowDNS page and try again.');
+    }
+
+    if (($payload['typ'] ?? '') !== 'slowdns_browser') {
+        v2_error(403, 'browser_session_invalid', 'Refresh the SlowDNS page and try again.');
+    }
+
+    $fingerprint = slowdns_client_fingerprint();
+    if (
+        ($payload['ip'] ?? '') !== $fingerprint['ip_hash'] ||
+        ($payload['ua'] ?? '') !== $fingerprint['ua_hash']
+    ) {
+        v2_error(403, 'browser_session_invalid', 'Refresh the SlowDNS page and try again.');
+    }
+
+    $fingerprint['browser_session'] = (string) ($payload['jti'] ?? '');
+    return $fingerprint;
+}
+
+function slowdns_issue_precheck_token(
+    string $install_code,
+    string $machine_id,
+    string $ssh_fingerprint,
+    string $product,
+    string $installer_version
+): array {
+    $issuedAt = time();
+    $expiresAt = $issuedAt + SLOWDNS_PRECHECK_TTL;
+    $payload = [
+        'iss' => slowdns_issuer(),
+        'typ' => 'slowdns_precheck',
+        'sub' => 'precheck_' . bin2hex(random_bytes(8)),
+        'code' => strtoupper(trim($install_code)),
+        'mid' => hash('sha256', trim($machine_id)),
+        'ssh' => hash('sha256', trim($ssh_fingerprint)),
+        'prd' => strtolower(trim($product)),
+        'ver' => trim($installer_version),
+        'iat' => $issuedAt,
+        'exp' => $expiresAt,
+        'jti' => bin2hex(random_bytes(8)),
+    ];
+
+    return [
+        'token' => slowdns_token_sign($payload),
+        'expires_at' => $expiresAt,
+        'payload' => $payload,
+    ];
+}
+
+function slowdns_validate_precheck_token(
+    string $token,
+    string $install_code,
+    string $machine_id,
+    string $ssh_fingerprint,
+    string $product
+): array {
+    try {
+        $payload = slowdns_token_verify($token);
+    } catch (Throwable $e) {
+        v2_error(403, 'precheck_token_invalid', $e->getMessage());
+    }
+
+    if (($payload['typ'] ?? '') !== 'slowdns_precheck') {
+        v2_error(403, 'precheck_token_invalid', 'Precheck token is invalid.');
+    }
+
+    if (($payload['code'] ?? '') !== strtoupper(trim($install_code))) {
+        v2_error(403, 'precheck_token_invalid', 'Precheck token does not match install code.');
+    }
+
+    if (($payload['mid'] ?? '') !== hash('sha256', trim($machine_id))) {
+        v2_error(403, 'precheck_token_invalid', 'Precheck token does not match this machine.');
+    }
+
+    if (($payload['ssh'] ?? '') !== hash('sha256', trim($ssh_fingerprint))) {
+        v2_error(403, 'precheck_token_invalid', 'Precheck token does not match this SSH fingerprint.');
+    }
+
+    if (($payload['prd'] ?? '') !== strtolower(trim($product))) {
+        v2_error(403, 'precheck_token_invalid', 'Precheck token product mismatch.');
+    }
+
     return $payload;
 }
 
@@ -174,6 +332,28 @@ function slowdns_cleanup_codes(): void {
     db()->exec("UPDATE slowdns_install_codes SET status = 'expired' WHERE status = 'issued' AND expires_at < UTC_TIMESTAMP()");
 }
 
+function slowdns_cleanup_history(): void {
+    slowdns_schema_ensure();
+
+    db()->exec(
+        "DELETE FROM slowdns_install_codes
+         WHERE status = 'expired'
+           AND expires_at < (UTC_TIMESTAMP() - INTERVAL " . (int) SLOWDNS_EXPIRED_CODE_RETENTION_DAYS . " DAY)"
+    );
+
+    db()->exec(
+        "DELETE FROM slowdns_install_activations
+         WHERE released_at IS NOT NULL
+           AND released_at < (UTC_TIMESTAMP() - INTERVAL " . (int) SLOWDNS_RELEASED_ACTIVATION_RETENTION_DAYS . " DAY)"
+    );
+
+    db()->exec(
+        "DELETE FROM slowdns_install_activations
+         WHERE install_token_used_at IS NOT NULL
+           AND install_token_used_at < (UTC_TIMESTAMP() - INTERVAL " . (int) SLOWDNS_CONFIRMED_ACTIVATION_RETENTION_DAYS . " DAY)"
+    );
+}
+
 // --- Rate limiting ------------------------------------------------------------
 
 /**
@@ -183,9 +363,22 @@ function slowdns_cleanup_codes(): void {
  * @param int    $max       Maximum hits allowed inside the window.
  * @param int    $window_s  Window size in seconds (3600 = per-hour, 86400 = per-day).
  */
-function slowdns_rate_limit(string $endpoint, int $max, int $window_s = 86400): void {
+function slowdns_rate_limit_subject_key(string $prefix, string $value): string {
+    $prefix = trim($prefix);
+    $value = trim($value);
+    $subject = $prefix . ':' . $value;
+    if (strlen($subject) <= 45) {
+        return $subject;
+    }
+    return $prefix . ':' . substr(hash('sha256', $value), 0, 32);
+}
+
+function slowdns_rate_limit_subject(string $subject, string $endpoint, int $max, int $window_s = 86400): void {
     slowdns_schema_ensure();
-    $ip     = client_ip();
+    $subject = trim($subject);
+    if ($subject === '') {
+        return;
+    }
     $window = gmdate('Y-m-d\TH', (int) (floor(time() / $window_s) * $window_s));
 
     // Upsert: insert on first hit, increment counter on subsequent ones.
@@ -193,17 +386,21 @@ function slowdns_rate_limit(string $endpoint, int $max, int $window_s = 86400): 
         "INSERT INTO `slowdns_rate_limits` (`ip`, `endpoint`, `window`, `hits`)
          VALUES (?, ?, ?, 1)
          ON DUPLICATE KEY UPDATE `hits` = `hits` + 1"
-    )->execute([$ip, $endpoint, $window]);
+    )->execute([$subject, $endpoint, $window]);
 
     $stmt = db()->prepare(
         "SELECT `hits` FROM `slowdns_rate_limits` WHERE `ip` = ? AND `endpoint` = ? AND `window` = ?"
     );
-    $stmt->execute([$ip, $endpoint, $window]);
+    $stmt->execute([$subject, $endpoint, $window]);
     $hits = (int) ($stmt->fetchColumn() ?: 0);
 
     if ($hits > $max) {
         v2_error(429, 'rate_limit_exceeded', 'Too many requests. Please wait before trying again.');
     }
+}
+
+function slowdns_rate_limit(string $endpoint, int $max, int $window_s = 86400): void {
+    slowdns_rate_limit_subject(client_ip(), $endpoint, $max, $window_s);
 }
 
 /**
@@ -256,10 +453,27 @@ function slowdns_find_activation(string $activation_id): ?array {
 }
 
 function v2_slowdns_issue_code(): never {
-    // 5 code requests per IP per hour.
-    slowdns_rate_limit('issue_code', 5, 3600);
+    $fingerprint = slowdns_require_browser_session();
+
+    // Tighten issuance a bit: 3 per hour and 10 per day per source IP.
+    slowdns_rate_limit('issue_code', 3, 3600);
+    slowdns_rate_limit('issue_code_daily', 10, 86400);
+    slowdns_rate_limit_subject(
+        slowdns_rate_limit_subject_key('browser', (string) ($fingerprint['browser_session'] ?? '')),
+        'issue_code_browser',
+        2,
+        3600
+    );
+    slowdns_rate_limit_subject(
+        slowdns_rate_limit_subject_key('fp', $fingerprint['ip_hash'] . '|' . $fingerprint['ua_hash']),
+        'issue_code_fingerprint',
+        6,
+        86400
+    );
     slowdns_rate_limit_cleanup(3600);
+    slowdns_rate_limit_cleanup(86400);
     slowdns_cleanup_codes();
+    slowdns_cleanup_history();
 
     $code    = slowdns_generate_install_code();
     $expires = time() + 300;
@@ -275,7 +489,11 @@ function v2_slowdns_issue_code(): never {
         gmdate('Y-m-d H:i:s', $expires),
     ]);
 
-    audit_log('slowdns_code_issue', $code, 'IP: ' . client_ip(), 'public');
+    audit_log('slowdns_code_issue', slowdns_code_hint($code), slowdns_audit_detail([
+        'request_ip' => $fingerprint['ip'],
+        'user_agent_hash' => $fingerprint['ua_hash'],
+        'expires_at' => gmdate('c', $expires),
+    ]), 'public');
     v2_out(201, [
         'install_code' => $code,
         'expires_at'   => gmdate('c', $expires),
@@ -283,15 +501,78 @@ function v2_slowdns_issue_code(): never {
     ], ['message' => 'SlowDNS install code issued']);
 }
 
+function v2_slowdns_precheck_install(): never {
+    slowdns_rate_limit('precheck', 10, 86400);
+    slowdns_rate_limit_cleanup(86400);
+    slowdns_cleanup_codes();
+    slowdns_cleanup_history();
+
+    $body = v2_read_json();
+
+    $install_code      = slowdns_validate_install_code((string) ($body['install_code'] ?? $body['license_key'] ?? ''));
+    $machine_id        = trim((string) ($body['machine_id'] ?? ''));
+    $ssh_fingerprint   = trim((string) ($body['ssh_fingerprint'] ?? ''));
+    $product           = strtolower(trim((string) ($body['product'] ?? 'slowdns')));
+    $installer_version = trim((string) ($body['installer_version'] ?? ''));
+
+    if ($machine_id === '' || $ssh_fingerprint === '') {
+        v2_error(422, 'validation_error', 'machine_id and ssh_fingerprint are required.');
+    }
+
+    slowdns_rate_limit_subject(
+        slowdns_rate_limit_subject_key('machine', hash('sha256', $machine_id)),
+        'precheck_machine',
+        10,
+        86400
+    );
+
+    $code = slowdns_find_code($install_code);
+    if (!$code) {
+        v2_error(404, 'install_code_not_found', 'Install code was not found.');
+    }
+    if (($code['status'] ?? 'issued') !== 'issued') {
+        v2_error(403, 'install_code_used', 'Install code has already been consumed.');
+    }
+    if (!empty($code['expires_at']) && strtotime((string) $code['expires_at']) < time()) {
+        db()->prepare("UPDATE slowdns_install_codes SET status = 'expired' WHERE id = ?")->execute([(int) $code['id']]);
+        v2_error(403, 'install_code_expired', 'Install code has expired.');
+    }
+    if ((int) ($code['activation_count'] ?? 0) >= SLOWDNS_MAX_ACTIVATIONS_PER_CODE) {
+        v2_error(403, 'install_code_max_activations', 'This install code has reached the maximum number of activation attempts. Please generate a new code.');
+    }
+
+    $precheck = slowdns_issue_precheck_token($install_code, $machine_id, $ssh_fingerprint, $product, $installer_version);
+
+    audit_log('slowdns_install_precheck', slowdns_code_hint($install_code), slowdns_audit_detail([
+        'machine_id_hash' => hash('sha256', $machine_id),
+        'ssh_fingerprint_hash' => hash('sha256', $ssh_fingerprint),
+        'installer_version' => $installer_version,
+        'precheck_expires_at' => gmdate('c', $precheck['expires_at']),
+    ]), 'public');
+
+    v2_out(200, [
+        'install_code' => $install_code,
+        'install_code_hint' => slowdns_code_hint($install_code),
+        'precheck_token' => $precheck['token'],
+        'precheck_expires_at' => gmdate('c', $precheck['expires_at']),
+        'machine_binding' => [
+            'machine_id' => $machine_id,
+            'ssh_fingerprint' => $ssh_fingerprint,
+        ],
+    ], ['message' => 'Install code validated']);
+}
+
 function v2_slowdns_activate_install(): never {
     // 5 activation attempts per IP per 24 hours.
     slowdns_rate_limit('activate', 5, 86400);
     slowdns_rate_limit_cleanup(86400);
     slowdns_cleanup_codes();
+    slowdns_cleanup_history();
 
     $body = v2_read_json();
 
     $install_code      = slowdns_validate_install_code((string) ($body['install_code'] ?? $body['license_key'] ?? ''));
+    $precheck_token    = trim((string) ($body['precheck_token'] ?? ''));
     $hostname          = strtolower(trim((string) ($body['hostname'] ?? '')));
     $public_ip         = trim((string) ($body['public_ip'] ?? ''));
     $machine_id        = trim((string) ($body['machine_id'] ?? ''));
@@ -303,6 +584,24 @@ function v2_slowdns_activate_install(): never {
         v2_error(422, 'validation_error', 'machine_id and ssh_fingerprint are required.');
     }
 
+    slowdns_rate_limit_subject(
+        slowdns_rate_limit_subject_key('machine', hash('sha256', $machine_id)),
+        'activate_machine',
+        5,
+        86400
+    );
+
+    $precheck_payload = null;
+    if ($precheck_token !== '') {
+        $precheck_payload = slowdns_validate_precheck_token(
+            $precheck_token,
+            $install_code,
+            $machine_id,
+            $ssh_fingerprint,
+            $body['product'] ?? 'slowdns'
+        );
+    }
+
     $code = slowdns_find_code($install_code);
     if (!$code) {
         v2_error(404, 'install_code_not_found', 'Install code was not found.');
@@ -310,7 +609,8 @@ function v2_slowdns_activate_install(): never {
     if (($code['status'] ?? 'issued') !== 'issued') {
         v2_error(403, 'install_code_used', 'Install code has already been consumed.');
     }
-    if (!empty($code['expires_at']) && strtotime((string) $code['expires_at']) < time()) {
+    $codeExpired = !empty($code['expires_at']) && strtotime((string) $code['expires_at']) < time();
+    if ($codeExpired && $precheck_payload === null) {
         db()->prepare("UPDATE slowdns_install_codes SET status = 'expired' WHERE id = ?")->execute([(int) $code['id']]);
         v2_error(403, 'install_code_expired', 'Install code has expired.');
     }
@@ -367,7 +667,16 @@ function v2_slowdns_activate_install(): never {
     audit_log(
         'slowdns_install_activate',
         $activation_id,
-        'Code: ' . $install_code . ', Host: ' . ($hostname ?: 'n/a') . ', IP: ' . client_ip(),
+        slowdns_audit_detail([
+            'install_code_hint' => slowdns_code_hint($install_code),
+            'activation_id' => $activation_id,
+            'hostname' => $hostname ?: 'n/a',
+            'request_ip' => client_ip(),
+            'bound_public_ip' => $public_ip,
+            'machine_id_hash' => hash('sha256', $machine_id),
+            'ssh_fingerprint_hash' => hash('sha256', $ssh_fingerprint),
+            'used_precheck' => $precheck_payload !== null,
+        ]),
         'public'
     );
 
@@ -425,7 +734,12 @@ function v2_slowdns_confirm_install(): never {
     audit_log(
         'slowdns_install_confirm',
         $activation_id,
-        'Host: ' . ($row['hostname'] ?? 'n/a') . ', IP: ' . client_ip(),
+        slowdns_audit_detail([
+            'activation_id' => $activation_id,
+            'hostname' => $row['hostname'] ?? 'n/a',
+            'request_ip' => client_ip(),
+            'bound_public_ip' => $row['public_ip'] ?? '',
+        ]),
         'public'
     );
     v2_out(200, [
@@ -438,14 +752,28 @@ function v2_slowdns_release_install(): never {
     slowdns_schema_ensure();
     $body = v2_read_json();
     $activation_id = trim((string) ($body['activation_id'] ?? ''));
+    $install_token = trim((string) ($body['install_token'] ?? ''));
 
-    if ($activation_id === '') {
-        v2_error(422, 'validation_error', 'activation_id is required.');
+    if ($activation_id === '' || $install_token === '') {
+        v2_error(422, 'validation_error', 'activation_id and install_token are required.');
+    }
+
+    try {
+        $payload = slowdns_token_verify($install_token, false);
+    } catch (Throwable $e) {
+        v2_error(403, 'token_invalid', $e->getMessage());
+    }
+
+    if (($payload['sub'] ?? '') !== $activation_id) {
+        v2_error(403, 'token_mismatch', 'Install token does not match activation.');
     }
 
     $row = slowdns_find_activation($activation_id);
     if (!$row || !empty($row['released_at'])) {
         v2_error(404, 'activation_not_found', 'Activation was not found.');
+    }
+    if (($row['install_token'] ?? '') !== $install_token) {
+        v2_error(403, 'token_mismatch', 'Install token is not valid for this activation.');
     }
 
     $code_id = (int) ($row['install_code_id'] ?? 0);
@@ -472,7 +800,12 @@ function v2_slowdns_release_install(): never {
     audit_log(
         'slowdns_install_release',
         $activation_id,
-        'Code restored: ' . ($can_restore_code ? 'yes' : 'no') . ', IP: ' . client_ip(),
+        slowdns_audit_detail([
+            'activation_id' => $activation_id,
+            'request_ip' => client_ip(),
+            'install_code_restored' => $can_restore_code,
+            'code_id' => $code_id,
+        ]),
         'public'
     );
     v2_out(200, [

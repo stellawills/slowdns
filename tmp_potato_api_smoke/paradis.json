@@ -1,0 +1,26 @@
+{
+  "inbounds": [
+    {
+      "settings": {
+        "clients": [
+          {
+            "id": "e9a78b57-e45e-48d2-95c0-4e02bd33593a",
+            "email": "bob",
+            "alterId": 0
+          }
+        ]
+      }
+    },
+    {
+      "settings": {
+        "clients": [
+          {
+            "id": "e9a78b57-e45e-48d2-95c0-4e02bd33593a",
+            "email": "bob",
+            "alterId": 0
+          }
+        ]
+      }
+    }
+  ]
+}

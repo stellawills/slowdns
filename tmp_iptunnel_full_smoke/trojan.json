@@ -1,0 +1,43 @@
+{
+  "inbounds": [
+    {
+      "settings": {
+        "clients": [
+          {
+            "password": "33333333-3333-3333-3333-333333333333",
+            "email": "carol"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws"
+      }
+    },
+    {
+      "settings": {
+        "clients": [
+          {
+            "password": "33333333-3333-3333-3333-333333333333",
+            "email": "carol"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc"
+      }
+    },
+    {
+      "settings": {
+        "clients": [
+          {
+            "password": "33333333-3333-3333-3333-333333333333",
+            "email": "carol"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "httpupgrade"
+      }
+    }
+  ]
+}

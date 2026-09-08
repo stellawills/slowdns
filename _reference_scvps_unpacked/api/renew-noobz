@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+JSON_FILE="/etc/noobzvpns/db_user.json"
+
+# Read JSON input from stdin
+read INPUT_DATA
+
+# Parse input
+username=$(echo "$INPUT_DATA" | jq -r '.username')
+
+# Output if no username
+if [[ -z "$username" || "$username" == "null" ]]; then
+  echo '{"error": "Username is required"}'
+  exit 1
+fi
+
+# Check if file exists and valid
+if [ ! -f "$JSON_FILE" ]; then
+  echo '{"error": "Database file not found"}'
+  exit 1
+fi
+
+if [ ! -s "$JSON_FILE" ]; then
+  echo '{"error": "Database file is empty"}'
+  exit 1
+fi
+
+if ! jq empty "$JSON_FILE" 2>/dev/null; then
+  echo '{"error": "Invalid JSON format in db_user.json"}'
+  exit 1
+fi
+
+# Check if user exists
+if ! jq -e --arg user "$username" '.users[$user]' "$JSON_FILE" >/dev/null; then
+  echo '{"error": "Username not found"}'
+  exit 1
+fi
+
+# Get current data
+user_data=$(jq -r --arg user "$username" '.users[$user] | [.expired, .issued] | @tsv' "$JSON_FILE")
+expired=$(echo "$user_data" | cut -f1)
+issued=$(echo "$user_data" | cut -f2)
+
+# Calculate new expiration
+issued_ts=$(date -d "$issued" +%s 2>/dev/null)
+if [[ $? -ne 0 ]]; then
+  echo '{"error": "Invalid issue date"}'
+  exit 1
+fi
+
+# Jalankan perintah perpanjang akun (harus ada command `noobzvpns renew`)
+if ! noobzvpns renew "$username" >/dev/null 2>&1; then
+  echo '{"error": "Failed to renew account"}'
+  exit 1
+fi
+
+# Ambil data expired terbaru
+new_user_data=$(jq -r --arg user "$username" '.users[$user] | [.expired, .issued] | @tsv' "$JSON_FILE")
+new_expired=$(echo "$new_user_data" | cut -f1)
+new_issued=$(echo "$new_user_data" | cut -f2)
+
+# Hitung tanggal expired aktual
+new_issued_ts=$(date -d "$new_issued" +%s)
+new_expire_ts=$((new_issued_ts + new_expired * 86400))
+expired_date=$(date -d "@$new_expire_ts" "+%Y-%m-%d %H:%M:%S")
+
+# Output JSON hasil sukses
+jq -n \
+  --arg username "$username" \
+  --arg expired "$expired_date" \
+  --arg message "NoobzVPN account successfully renewed" \
+  '{message: $message, username: $username, expires_on: $expired}'

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+telegram_bot_token=$(cat /usr/local/etc/v2ray/bot.key)
+telegram_chatid=$(cat /usr/local/etc/v2ray/client.id)
+
+red() { echo -e "\\033[32;1m${*}\\033[0m"; }
+domain=$(cat /usr/local/etc/v2ray/domain)
+clear
+until [[ $user =~ ^[a-zA-Z0-9_]+$ && ${CLIENT_EXISTS} == '0' ]]; do
+    echo -e "───────────────────────────"
+    echo -e "   Add Xray/Vless Account  "
+    echo -e "───────────────────────────"
+
+    read -rp "User: " -e user
+    CLIENT_EXISTS=$(grep -w $user /usr/local/etc/v2ray/config.json | wc -l)
+
+    if [[ ${CLIENT_EXISTS} == '1' ]]; then
+        clear
+        echo -e "───────────────────────────"
+        echo -e "   Add Xray/Vless Account  "
+        echo -e "───────────────────────────"
+        echo ""
+        echo "please choose another name."
+        echo ""
+        echo -e "───────────────────────────"
+    fi
+done
+#uuid=$(cat /proc/sys/kernel/random/uuid)
+read -p "Expired (days): " masaaktif
+read -p "Input uuid (Empty Default): " uuid
+if [[ -z "$uuid" || "$uuid" =~ [[:space:]] || ${#uuid} -lt 5 ]]; then
+    uuid=$(cat /proc/sys/kernel/random/uuid)
+    echo "Generated new UUID: $uuid"
+else
+    echo "Using provided UUID: $uuid"
+fi
+exp=$(date -d "$masaaktif days" +"%Y-%m-%d")
+sed -i '/#vless$/a\#& '"$user $exp"'\
+},{"id": "'""$uuid""'","email": "'""$user""'"' /usr/local/etc/v2ray/config.json
+vlesslink1="vless://${uuid}@${domain}:443?path=/vless&security=tls&encryption=none&type=ws#${user}"
+vlesslink2="vless://${uuid}@${domain}:80?path=/vless&encryption=none&type=ws#${user}"
+vlesslink3="vless://${uuid}@${domain}:443?mode=gun&security=tls&encryption=none&type=grpc&serviceName=vless-grpc&sni=${domain}#${user}"
+systemctl restart v2ray
+
+TEKS=$(cat <<EOF
+<b>───────────────────</b>
+   VLESS ACCOUNT   
+<b>───────────────────</b>
+<b>Remarks     : </b><code>${user}</code>
+<b>Domain      : </b><code>${domain}</code>
+<b>Port Tls    : </b><code>443</code>
+<b>Port Ntls   : </b><code>80, 2082</code>
+<b>UUID/ID     : </b><code>${uuid}</code>
+<b>Path        : </b><code>/vless</code>
+<b>ServiceName : </b><code>vless-grpc</code>
+<b>───────────────────</b>
+<b>Link TLS    :</b>
+<pre>${vlesslink1}</pre>
+<b>───────────────────</b>
+<b>Link NTLS   :</b>
+<pre>${vlesslink2}</pre>
+<b>───────────────────</b>
+<b>Link GRPC   :</b>
+<pre>${vlesslink3}</pre>
+<b>───────────────────</b>
+<b>Expired On  : </b><code>$exp</code>
+<b>───────────────────</b>
+EOF
+)
+
+curl -s -X POST "https://api.telegram.org/bot$telegram_bot_token/sendMessage" \
+    -d "chat_id=$telegram_chatid" \
+    -d "parse_mode=HTML" \
+    --data-urlencode "text=$TEKS" > /dev/null
+
+clear
+echo -e "╔───────────────────╗"
+echo -e "    VLESS ACCOUNT   "
+echo -e " ───────────────────"
+echo -e " Remarks     : ${user}" 
+echo -e " Domain      : ${domain}" 
+echo -e " Port Tls    : 443" 
+echo -e " Port Ntls   : 80, 2082" 
+echo -e " UUID/ID     : ${uuid}"
+echo -e " Path        : /vless"
+echo -e " ServiceName : vless-grpc"
+echo -e " ───────────────────"
+echo -e " Link TLS    : ${vlesslink1}"
+echo -e " ───────────────────"
+echo -e " Link NTLS   : ${vlesslink2}"
+echo -e " ───────────────────"
+echo -e " Link GRPC   : ${vlesslink3}"
+echo -e " ───────────────────"
+echo -e " Expired On  : $exp"
+echo -e "╚───────────────────╝"
+echo ""

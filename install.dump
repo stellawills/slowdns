@@ -1,0 +1,13 @@
+FILE=/bin/bash
+ARGV[0]=<<EOF
+./install
+EOF
+ARGV[1]=<<EOF
+-c
+EOF
+ARGV[2]=<<EOF
+exec './install' "$@"
+EOF
+ARGV[3]=<<EOF
+./install
+EOF

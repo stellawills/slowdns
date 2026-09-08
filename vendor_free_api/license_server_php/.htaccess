@@ -1,0 +1,39 @@
+RewriteEngine On
+
+# Block direct access to internal files
+RewriteRule ^(config|db)\.php$ - [F,L]
+RewriteRule ^schema\.sql$ - [F,L]
+
+# Explicit public version manifest routes
+RewriteRule ^version\.json$ index.php [QSA,L]
+RewriteRule ^api/v2/version$ index.php [QSA,L]
+
+# Clean URLs: /admin -> admin.php, /client -> client.php
+# Remove .php extension if accessed directly
+RewriteCond %{THE_REQUEST} /([^.]+)\.php [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Serve .php files for clean URLs
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/%{REQUEST_URI}.php -f
+RewriteRule ^(.+)$ $1.php [L]
+
+# Route API paths through index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Permissions-Policy "geolocation=(), camera=(), microphone=()"
+    Header set Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
+    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes

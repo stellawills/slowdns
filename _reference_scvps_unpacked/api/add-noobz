@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+# ========================================================
+
+# Membaca domain dari file
+domain=$(cat /usr/local/etc/v2ray/domain)
+
+# Membaca input JSON dari API
+input_data=$(cat)
+
+# Ekstrak data dari JSON
+user=$(echo "$input_data" | jq -r '.user')
+device=$(echo "$input_data" | jq -r '.device')
+bw=$(echo "$input_data" | jq -r '.bw')
+masaaktif=$(echo "$input_data" | jq -r '.masaaktif')
+
+# Password tetap sama
+pass="fn-project.com"
+
+# Menambahkan akun NoobzVPN
+noobzvpns add --password "$pass" "$user" --bandwidth $bw --devices $device --expired $masaaktif &> /dev/null
+expi=$(date -d "$masaaktif days" +"%Y-%m-%d")
+
+# Menyimpan data ke database
+DATADB=$(cat /etc/noobzvpns/.noobz.db | grep "^#noobzvpns#" | grep -w "${user}" | awk '{print $2}')
+if [[ "${DATADB}" != '' ]]; then
+  sed -i "/\b${user}\b/d" /etc/noobzvpns/.noobz.db
+fi
+echo "#noobzvpns# ${user} ${pass} ${expi}" >>/etc/noobzvpns/.noobz.db
+
+# Menyusun respons dalam format JSON
+response=$(cat <<EOF
+{
+    "status": "true",
+    "code": 200,
+    "message": "Akun NoobzVPN berhasil dibuat",
+    "user": "$user",
+    "domain": "$domain",
+    "password": "$pass",
+    "limit_device": "$device",
+    "limit_bandwidth": "$bw GB",
+    "http_ports": "80, 2082",
+    "https_ports": "443",
+    "payload": "GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]",
+    "expiration_date": "$expi"
+}
+EOF
+)
+
+# Outputkan respons dalam format JSON
+echo -e "$response"

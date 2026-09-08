@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+# ========================================================
+
+# Data
+domain=$(cat /usr/local/etc/v2ray/domain)
+
+# Membaca input JSON dari API
+input_data=$(cat)
+
+# Ekstrak data dari JSON
+user=$(echo "$input_data" | jq -r '.user')
+masaaktif=$(echo "$input_data" | jq -r '.masaaktif')
+
+# Validasi jika user sudah ada
+CLIENT_EXISTS=$(grep -w $user /usr/local/etc/v2ray/config.json | wc -l)
+if [[ ${CLIENT_EXISTS} == '1' ]]; then
+    echo -e "{\"status\": \"false\", \"message\": \"User already exists, please choose another name.\"}"
+    exit 1
+fi
+
+# Jika uuid kosong, buat UUID baru
+uuid=$(cat /proc/sys/kernel/random/uuid)
+
+# Hitung tanggal kedaluwarsa
+exp=`date -d "$masaaktif days" +"%Y-%m-%d"`
+
+# Menambahkan user baru ke config.json
+sed -i '/#vmess$/a\### '"$user $exp"'\
+},{"id": "'""$uuid""'","alterId": '"0"',"email": "'""$user""'"' /usr/local/etc/v2ray/config.json
+
+# Membuat JSON VMess untuk tiga link
+acs=`cat<<EOF
+      {
+      "v": "2",
+      "ps": "${user}",
+      "add": "${domain}",
+      "port": "443",
+      "id": "${uuid}",
+      "aid": "0",
+      "net": "ws",
+      "path": "/vmess",
+      "type": "none",
+      "host": "${domain}",
+      "tls": "tls"
+}
+EOF`
+
+ask=`cat<<EOF
+      {
+      "v": "2",
+      "ps": "${user}",
+      "add": "${domain}",
+      "port": "80",
+      "id": "${uuid}",
+      "aid": "0",
+      "net": "ws",
+      "path": "/vmess",
+      "type": "none",
+      "host": "${domain}",
+      "tls": "none"
+}
+EOF`
+
+grpc=`cat<<EOF
+      {
+      "v": "2",
+      "ps": "${user}",
+      "add": "${domain}",
+      "port": "443",
+      "id": "${uuid}",
+      "aid": "0",
+      "net": "grpc",
+      "path": "vmess-grpc",
+      "type": "none",
+      "host": "${domain}",
+      "tls": "tls"
+}
+EOF`
+
+# Encode link VMess
+vmesslink1="vmess://$(echo $acs | base64 -w 0)"
+vmesslink2="vmess://$(echo $ask | base64 -w 0)"
+vmesslink3="vmess://$(echo $grpc | base64 -w 0)"
+
+# Restart v2ray
+systemctl restart v2ray
+
+# Response data
+response=$(cat <<EOF
+{
+    "status": "true",
+    "code": 200,
+    "message": "Akun VMess berhasil dibuat",
+    "user": "$user",
+    "domain": "$domain",
+    "uuid": "$uuid",
+    "http": "80, 2082",
+    "https": "443",
+    "grpc": "443",
+    "expiration_date": "$exp",
+    "path": "/whatever",
+    "service_name": "vmess-grpc",
+    "links": {
+        "tls": "$vmesslink1",
+        "ntls": "$vmesslink2",
+        "grpc": "$vmesslink3"
+    }
+}
+EOF
+)
+
+# Outputkan respons dalam format JSON
+clear
+echo -e "$response"

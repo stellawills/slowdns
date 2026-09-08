@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+
+# Variabel
+domain=$(cat /usr/local/etc/v2ray/domain)
+ml=$(echo "$(lsb_release -ds) [ $(uname -m) ]")
+tram=$(free -m | awk 'NR==2 {print $2}')
+versi=$($(which v2ray) version | grep "V2Ray" | awk '{print $2}')
+
+# Data IP VPS
+ipsaya=$(curl -s http://checkip.amazonaws.com)
+asn_info=$(timeout 5 curl -s "http://ip-api.com/json/$ipsaya" | jq -r '.isp // "Unknown ISP"')
+
+# === WARNA ===
+RED='\e[31m'
+GREEN='\e[32m'
+WHITE='\e[97m'
+NC='\e[0m' # No Color
+
+# === FUNGSI STATUS SERVICE ===
+check_service() {
+    systemctl is-active --quiet "$1" && echo -e "${GREEN}ON${NC}" || echo -e "${RED}OFF${NC}"
+}
+
+# total akun
+shc=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd | wc -l)
+noobzd=$(cat /etc/noobzvpns/.noobz.db | sort | uniq | wc -l)
+trojan=$(cat /usr/local/etc/v2ray/config.json | grep "#!" | sort | uniq | wc -l)
+vless=$(cat /usr/local/etc/v2ray/config.json | grep "#&" | sort | uniq | wc -l)
+vmess=$(cat /usr/local/etc/v2ray/config.json | grep "###" | sort | uniq | wc -l)
+ss=$(cat /usr/local/etc/v2ray/config.json | grep "###&" | sort | uniq | wc -l)
+
+# Status service
+snoobz=$(check_service noobzvpns)
+sv2ray=$(check_service v2ray)
+snginx=$(check_service nginx)
+sslh=$(check_service sslh)
+
+clear
+echo -e "─────────────────────────────────────────────────────"
+echo -e "[              Autoscript By Rerechan02             ]"
+echo -e "─────────────────────────────────────────────────────"
+echo -e " OS: $ml"
+echo -e " IP: $ipsaya"
+echo -e " Ram: $tram MB"
+echo -e " ISP: $asn_info"
+echo -e " Domain: $domain"
+echo -e " V2ray Version: $versi "
+echo -e "─────────────────────────────────────────────────────"
+echo -e "Total Account:                                       "
+echo -e " SSH        : $shc "
+echo -e " Noobz VPN  : $noobzd "
+echo -e " Vmess      : $vmess  "
+echo -e " Vless      : $vless  "
+echo -e " Trojan     : $trojan "
+echo -e "─────────────────────────────────────────────────────"
+echo -e "Menu VPN:                                            "
+echo -e " 01. Menu SSH                                        "
+echo -e " 02. Menu Noobz VPN                                  "
+echo -e " 03. Menu V2ray Vmess                                "
+echo -e " 04. Menu V2ray Vless                                "
+echo -e " 05. Menu V2ray Trojan                               "
+echo -e "─────────────────────────────────────────────────────"
+echo -e "Other Menu:                                          "
+echo -e " 06. Menu Bot Telegram                               "
+echo -e " 07. Backup Database                                 "
+echo -e " 08. Restore Database                                "
+echo -e " 09. Menu Domain & Certificate                       "
+echo -e " 10. Restart All Service                             "
+echo -e " 11. Menu Rest API Create Account                    "
+echo -e " 12. Seting SlowDNS                                  "
+echo -e "─────────────────────────────────────────────────────"
+echo -e "NoobzVPN: $snoobz " "V2ray: $sv2ray " "Nginx: $snginx " "SSLH: $sslh "
+echo -e "─────────────────────────────────────────────────────"
+read -p "Input Option: " opt
+case $opt in
+1|01) menu-ssh ;;
+2|02) menu-noobz ;;
+3|03) menu-vmess ;;
+4|04) menu-vless ;;
+5|05) menu-trojan ;;
+6|06) bot-menu ;;
+7|07) backup ;;
+8|08) restore ;;
+9|09) change-domain ;;
+10) clear ; systemctl daemon-reload ; pkill sslh ; systemctl restart v2ray proxy danted badvpn udp-custom nginx sslh ; clear ; echo -e "success restart all service" ; sleep 5 ; menu ;;
+11) menu-api ;;
+12) slowdns ;;
+*) menu ;;
+esac

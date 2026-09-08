@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+JSON_FILE="/etc/noobzvpns/db_user.json"
+
+# Warna terminal
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+get_expired_date() {
+  local issued="$1"
+  local expired="$2"
+  local issued_timestamp
+  local expired_timestamp
+  local expired_date
+
+  issued_timestamp=$(date --date="$issued" +%s 2>/dev/null)
+  
+  if [ $? -ne 0 ]; then
+    echo "Invalid Date"
+    return
+  fi
+
+  expired_timestamp=$((issued_timestamp + expired * 86400)) # 86400 detik per hari
+  expired_date=$(date -d "@$expired_timestamp" "+%Y-%m-%d %H:%M:%S")
+  
+  echo "$expired_date"
+}
+
+convert_bandwidth() {
+  local bandwidth="$1"
+  
+  if [ "$bandwidth" -ge 1024 ]; then
+    echo "$(echo "scale=2; $bandwidth / 1024" | bc) TB"
+  else
+    echo "$bandwidth GB"
+  fi
+}
+
+get_blocked_status() {
+  local blocked="$1"
+  
+  if [ "$blocked" == "true" ]; then
+    echo -e "${RED}true${NC}"
+  else
+    echo -e "${GREEN}false${NC}"
+  fi
+}
+
+display_user_info() {
+  local user="$1"
+  local password="$2"
+  local blocked="$3"
+  local devices="$4"
+  local bandwidth="$5"
+  local expired="$6"
+  
+  echo -e "${BOLD}Username         :${NC} $user"
+  echo -e "Password         : $password"
+  echo -e "Blocked          : $blocked"
+  echo -e "Limit Device     : $devices Device"
+  echo -e "Limit Bandwidth  : $bandwidth"
+  echo -e "Expired          : $expired"
+  echo -e "------------------------------"
+}
+
+check_json_file() {
+  if [ ! -f "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File Database Not Found${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File not found\"}${NC}"
+    exit 1
+  fi
+
+  if [ ! -s "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File is empty${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File is empty\"}${NC}"
+    exit 1
+  fi
+
+  if ! jq empty "$JSON_FILE" 2>/dev/null; then
+    echo -e "${RED}404 Not Found${NC}: Invalid JSON format${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"Invalid JSON format\"}${NC}"
+    exit 1
+  fi
+
+  echo -e "${GREEN}200 OK${NC}: File found and valid${NC}"
+}
+
+list_accounts() {
+clear
+  check_json_file
+
+  echo -e "${BOLD}List Account Noobzvpns${NC}"
+  echo "==========================="
+
+  jq -r '.users | to_entries[] | [.key, .value.password, .value.blocked, .value.devices, .value.bandwidth, .value.expired, .value.issued] | @tsv' "$JSON_FILE" |
+  while IFS=$'\t' read -r user password blocked devices bandwidth expired issued; do
+
+    expired_date=$(get_expired_date "$issued" "$expired")
+    
+    bw=$(convert_bandwidth "$bandwidth")
+    
+    block_status=$(get_blocked_status "$blocked")
+    
+    display_user_info "$user" "$password" "$block_status" "$devices" "$bw" "$expired_date"
+  done
+}
+
+list_accounts

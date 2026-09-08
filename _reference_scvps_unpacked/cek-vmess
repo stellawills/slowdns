@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+# ========================================================
+
+red() { echo -e "\\033[32;1m${*}\\033[0m"; }
+
+clear
+echo -n >/tmp/other.txt
+echo -n >/tmp/org_cache.txt
+declare -A ip_org_cache
+
+data=($(grep '^###' /usr/local/etc/v2ray/config.json | cut -d ' ' -f 2 | sort | uniq))
+
+echo -e "───────────────────────────"
+echo -e "    VMESS LOGIN ACCOUNT    "
+echo -e "───────────────────────────"
+
+for akun in "${data[@]}"; do
+    [[ -z "$akun" ]] && akun="tidakada"
+
+    echo -n >/tmp/ipvmess.txt
+    mapfile -t data2 < <(tail -n 500 /var/log/v2ray/access.log | cut -d " " -f 3 | sed 's/tcp://g' | cut -d ":" -f 1 | sort | uniq)
+
+    for ip in "${data2[@]}"; do
+        jum=$(grep -w "$akun" /var/log/v2ray/access.log | tail -n 500 | cut -d " " -f 3 | sed 's/tcp://g' | cut -d ":" -f 1 | grep -w "$ip" | sort | uniq)
+        if [[ "$jum" == "$ip" ]]; then
+            echo "$jum" >>/tmp/ipvmess.txt
+        else
+            echo "$ip" >>/tmp/other.txt
+        fi
+        jum2=$(< /tmp/ipvmess.txt)
+        sed -i "/$jum2/d" /tmp/other.txt >/dev/null 2>&1
+    done
+
+    jum=$(< /tmp/ipvmess.txt)
+    if [[ -n "$jum" ]]; then
+        echo "user : $akun"
+        nl /tmp/ipvmess.txt | while read -r line; do
+            ip=$(echo "$line" | awk '{print $2}')
+            if [[ -z "${ip_org_cache[$ip]}" ]]; then
+                response=$(timeout 5 curl -s "http://ip-api.com/json/$ip")
+                org=$(echo "$response" | jq -r '.org // empty')
+                [[ -z "$org" ]] && org=$(echo "$response" | jq -r '.isp // "Unknown Org"')
+                ip_org_cache[$ip]="$org"
+                echo "$ip|$org" >> /tmp/org_cache.txt
+            else
+                org="${ip_org_cache[$ip]}"
+            fi
+            echo "$line / $org"
+        done
+        echo -e "───────────────────────────"
+    fi
+    rm -f /tmp/ipvmess.txt
+done
+
+rm -f /tmp/other.txt /tmp/org_cache.txt
+echo ""

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+# Read JSON input from stdin
+read INPUT_DATA
+
+# Parse JSON input using jq
+user=$(echo "$INPUT_DATA" | jq -r '.username')
+masaaktif=$(echo "$INPUT_DATA" | jq -r '.days')
+
+# Set config path
+config="/usr/local/etc/v2ray/config.json"
+
+# Validate existing clients
+NUMBER_OF_CLIENTS=$(grep -c -E "^### " "$config")
+if [[ ${NUMBER_OF_CLIENTS} == '0' ]]; then
+    echo -e "{\"error\": \"You have no existing clients!\"}"
+    exit 1
+fi
+
+# Validate input
+if [ -z "$user" ]; then
+    echo -e "{\"error\": \"Username is required!\"}"
+    exit 1
+fi
+
+# Check if user exists and get current expiration
+exp=$(grep -wE "^### $user" "$config" | cut -d ' ' -f 3 | sort | uniq)
+if [ -z "$exp" ]; then
+    echo -e "{\"error\": \"User not found!\"}"
+    exit 1
+fi
+
+# Calculate new expiration date
+now=$(date +%Y-%m-%d)
+d1=$(date -d "$exp" +%s)
+d2=$(date -d "$now" +%s)
+exp2=$(( (d1 - d2) / 86400 ))
+exp3=$(($exp2 + $masaaktif))
+exp4=$(date -d "$exp3 days" +"%Y-%m-%d")
+
+# Update expiration in config
+sed -i "/### $user/c\### $user $exp4" "$config"
+systemctl restart v2ray > /dev/null 2>&1
+
+# Output result in JSON
+OUTPUT=$(jq -n \
+  --arg user "$user" \
+  --arg exp4 "$exp4" \
+  '{message: "Vmess account successfully extended", username: $user, expires_on: $exp4}')
+
+echo "$OUTPUT" | jq .

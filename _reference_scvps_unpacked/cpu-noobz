@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+data="/etc/noobzvpns/.noobz.db"
+clear
+
+echo "=========================="
+echo "Database Contents:"
+echo "=========================="
+cat ${data} | grep "#noobzvpns#" | awk '{print $2}'
+echo "=========================="
+read -p "Input Username: " current_username
+if ! grep -q "$current_username" ${data}; then
+    echo "Username not found in database."
+    exit 1
+fi
+echo "Old Username: $current_username"
+read -p "Input New Username: " new_username
+if [ -z "$new_username" ]; then
+    echo "Username not changed."
+    exit 0
+fi
+noobzvpns rename $current_username $new_username
+awk -v old_user="$current_username" -v new_user="$new_username" \
+    'BEGIN {FS=OFS=" "} 
+    $2 == old_user {$2 = new_user} {print}' ${data} > ${data}.tmp && mv ${data}.tmp ${data}
+clear
+echo -e "
+=============================
+Sukses Mengubah Username
+=============================
+Username Lama: ${current_username}@fn-project
+Username Baru: ${new_username}@fn-project
+============================="

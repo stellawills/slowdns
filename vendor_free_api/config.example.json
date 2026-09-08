@@ -1,0 +1,135 @@
+{
+  "bind": "127.0.0.1",
+  "port": 8080,
+  "api_key": "replace-with-your-own-random-key",
+  "db_path": "/usr/sbin/iptunnel/iptunnel.db",
+  "hostname": "api.example.com",
+  "public_ip": "203.0.113.10",
+  "city": "",
+  "isp": "",
+  "allow_legacy_db_key": true,
+  "provisioning": {
+    "enabled": false,
+    "ssh_device_keys": false,
+    "openvpn_device_certificates": false,
+    "xray_device_certificates": false,
+    "xray_state_dir": "/var/lib/iptunnel-device-xray",
+    "xray_binary": "/usr/local/bin/xray",
+    "managed_port": 9443,
+    "managed_server_name": "vpn.example.com",
+    "managed_server_certificate": "/etc/letsencrypt/live/vpn.example.com/fullchain.pem",
+    "managed_server_key": "/etc/letsencrypt/live/vpn.example.com/privkey.pem",
+    "client_ca_certificate": "/var/lib/iptunnel-provisioning/client-ca.pem",
+    "client_ca_key": "/var/lib/iptunnel-provisioning/client-ca.key",
+    "ssh_db_path": "/var/lib/iptunnel-provisioning/ssh.sqlite3",
+    "server_id": "replace-with-immutable-registry-id",
+    "db_path": "/var/lib/iptunnel-provisioning/credentials.sqlite3",
+    "credential_ttl_days": 30,
+    "reconnect_grace_seconds": 30,
+    "openvpn_management": {
+      "udp": "/run/iptunnel-provisioning/udp.sock"
+    }
+  },
+  "ssh": {
+    "manage_system_users": true,
+    "shell": "/bin/false",
+    "ws_path": "/sshws",
+    "ws_path_aliases": [
+      "/ssh"
+    ],
+    "ports": {
+      "any": "22,53,80,109,143,443,2082,2083,3128,8080,8443",
+      "none": "-",
+      "ssh": "22",
+      "dropbear": "109,143",
+      "ssl": "443,2082",
+      "ws": "80,443,2082",
+      "slowdns": "53",
+      "squid": "3128,8080",
+      "hysteria": "-",
+      "ovpnohp": "-",
+      "ovpntcp": "-",
+      "ovpnudp": "-"
+    }
+  },
+  "slowdns": {
+    "enabled": true,
+    "service": "iptunnel-slowdns",
+    "mux_service": "iptunnel-udp53-mux",
+    "listen_port": 5300,
+    "public_port": 53,
+    "local_port": 8000,
+    "target": "127.0.0.1:22",
+    "udp53_mode": "slowdns",
+    "public_hostname": "api.example.com",
+    "ns_host": "api.example.com",
+    "tunnel_domain": "dns.api.example.com",
+    "zone_prefix": "dns",
+    "ns_prefix": "",
+    "public_key_path": "/etc/iptunnel/slowdns/server.pub",
+    "private_key_path": "/etc/iptunnel/slowdns/server.key",
+    "info_path": "/var/www/html/slowdns-info.txt",
+    "mtu": 1232
+  },
+  "hysteria": {
+    "enabled": false,
+    "service": "hysteria-server",
+    "port": 5666,
+    "protocol": "udp",
+    "hop_enabled": false,
+    "hop_ports": "-",
+    "obfs": "",
+    "password": "",
+    "sni": "",
+    "ca_cert_path": "/var/www/html/hysteria.ca.crt",
+    "info_path": "/var/www/html/hysteria-info.txt"
+  },
+  "openvpn": {
+    "enabled": false,
+    "tcp_public_port": 1194,
+    "udp_public_port": 53,
+    "udp_public_ports": [],
+    "udp_internal_port": 25000
+  },
+  "xray": {
+    "restart_services": true,
+    "ports": {
+      "any": "80,443",
+      "none": "80",
+      "tls": "443"
+    },
+    "paths": {
+      "vmess": {
+        "primary": "/vmess",
+        "grpc": "vmess",
+        "multi": "/vmess",
+        "stn": "/vmess",
+        "up": "/upvmess"
+      },
+      "vless": {
+        "primary": "/vless",
+        "grpc": "vless",
+        "multi": "/vless",
+        "stn": "/vless",
+        "up": "/upvless"
+      },
+      "trojan": {
+        "primary": "/trojan",
+        "grpc": "trojan",
+        "multi": "/trojan",
+        "stn": "/trojan",
+        "up": "/uptrojan"
+      }
+    },
+    "configs": {
+      "vmess": "/etc/iptunnel/xray/vmess.json",
+      "vless": "/etc/iptunnel/xray/vless.json",
+      "trojan": "/etc/iptunnel/xray/trojan.json"
+    },
+    "services": {
+      "vmess": "iptunnel-vmess",
+      "vless": "iptunnel-vless",
+      "trojan": "iptunnel-trojan"
+    }
+  }
+}

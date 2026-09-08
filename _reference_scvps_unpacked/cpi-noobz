@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+JSON_FILE="/etc/noobzvpns/db_user.json"
+
+# Warna terminal
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Tampilkan informasi user
+display_user_info() {
+  local user="$1"
+  local devices="$2"
+  
+  echo -e "${BOLD}Username         :${NC} $user"
+  echo -e "Limit Device     : $devices Device"
+  echo -e "------------------------------"
+}
+
+# Cek file JSON
+check_json_file() {
+  if [ ! -f "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File Database Not Found${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File not found\"}${NC}"
+    exit 1
+  fi
+
+  if [ ! -s "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File is empty${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File is empty\"}${NC}"
+    exit 1
+  fi
+
+  if ! jq empty "$JSON_FILE" 2>/dev/null; then
+    echo -e "${RED}404 Not Found${NC}: Invalid JSON format${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"Invalid JSON format\"}${NC}"
+    exit 1
+  fi
+
+  echo -e "${GREEN}200 OK${NC}: File found and valid${NC}"
+}
+
+# Tampilkan daftar user
+list_accounts() {
+  clear
+  check_json_file
+
+  echo -e "${BOLD}Change Limit Bandwidth${NC}"
+  echo "==========================="
+
+  jq -r '.users | to_entries[] | [.key, .value.devices] | @tsv' "$JSON_FILE" |
+  while IFS=$'\t' read -r user devices; do
+    display_user_info "$user" "$devices"
+  done
+}
+
+# Fungsi untuk mengubah bandwidth
+change_devices() {
+  local username="$1"
+  local new_limit_ip="$2"
+
+noobzvpns edit $username -d $new_limit_ip
+clear
+check_json_file
+echo -e "
+Success Change Limit Devices
+=============================
+Username: ${username}@fn-project
+New Limit Devices: $new_limit_ip
+============================="
+}
+
+check_username_validity() {
+  local username="$1"
+
+  if jq -e --arg user "$username" '.users[$user]' "$JSON_FILE" > /dev/null; then
+    echo -e "${GREEN}200 OK${NC}: Username found"
+  else
+    echo -e "${RED}404 Not Found${NC}: Username not found"
+    exit 1
+  fi
+}
+
+# Eksekusi
+list_accounts
+read -p "Input Username: " username
+check_username_validity $username
+read -p "New Limit Devices: " new_limit
+
+if ! [[ "$new_limit" =~ ^[0-9]+$ ]]; then
+  echo -e "${RED}Error${NC}: Devices must be a number"
+  exit 1
+fi
+
+change_devices "$username" "$new_limit"

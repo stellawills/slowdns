@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+# Support me Thanks
+
+# =================== COLOR & STYLE ===================
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
+blue='\033[0;34m'
+ungu='\033[0;35m'
+cyan='\033[0;36m'
+bold='\033[1m'
+reset='\033[0m'
+Green_background="\033[42;37m"
+Red_background="\033[41;37m"
+Suffix="\033[0m"
+# =====================================================
+
+TO_HOST=111
+
+draw_line() {
+  printf "${ungu}%0.s—" $(seq 1 50)
+  printf "${plain}\n"
+}
+
+header() {
+  clear
+  draw_line
+  echo -e "${bold}${cyan}         Project Rerechan - SlowDNS Manager${plain}"
+  draw_line
+}
+
+footer() {
+  draw_line
+  echo -e "${yellow}  Thank you for using this script by Rerechan02${plain}"
+  draw_line
+}
+
+show_status() {
+  local status="$1"
+  if [[ "$status" == "enabled" ]]; then
+    echo -e "${green}[✔] SlowDNS is ENABLED${plain}"
+  elif [[ "$status" == "disabled" ]]; then
+    echo -e "${red}[✘] SlowDNS is DISABLED${plain}"
+  else
+    echo -e "${yellow}[!] SlowDNS status unknown${plain}"
+  fi
+}
+
+show_dns_info() {
+  local ns pub
+  ns=$(cat /etc/slowdns/nameserver 2>/dev/null)
+  pub=$(cat /etc/slowdns/server.pub 2>/dev/null)
+  echo -e "${cyan}Nameserver :${plain} ${yellow}${ns}${plain}"
+  echo -e "${cyan}PUB Key    :${plain} ${blue}${pub}${plain}"
+}
+
+pause() {
+  echo -ne "${plain}Press any key to continue..."; read -n1 -s
+}
+
+# =================== SYSTEMD & IPTABLES ===================
+add_iptables_ssh() {
+  # Pastikan rule OpenVPN tidak aktif
+  del_iptables_openvpn
+  iptables -I INPUT -p udp --dport 5300 -j ACCEPT
+  iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
+  key=$(cat /etc/slowdns/server.key)
+  pub=$(cat /etc/slowdns/server.pub)
+  ns=$(cat /etc/slowdns/nameserver)
+  systemctl stop dnstt 2>/dev/null; systemctl stop redsocks 2>/dev/null
+  systemctl disable dnstt 2>/dev/null; systemctl disable redsocks 2>/dev/null
+  clear
+  cat > /etc/systemd/system/dnstt.service <<EOF
+[Unit]
+Description=SlowDNS Project Rerechan Autoscript Service
+Documentation=https://t.me/fn_project
+After=network.target nss-lookup.target
+
+[Service]
+Type=simple
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ExecStart=/usr/sbin/dns-server -udp :5300 -privkey-file /etc/slowdns/server.key $ns 127.0.0.1:111
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable dnstt
+  systemctl start dnstt
+}
+
+del_iptables_ssh() {
+  # Remove all matching rules for port 5300 and REDIRECT to 5300 (handle multiple rules)
+  while iptables -C INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null; do
+    iptables -D INPUT -p udp --dport 5300 -j ACCEPT
+  done
+  while iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null; do
+    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
+  done
+  key=$(cat /etc/slowdns/server.key)
+  pub=$(cat /etc/slowdns/server.pub)
+  ns=$(cat /etc/slowdns/nameserver)
+  systemctl stop dnstt 2>/dev/null; systemctl stop redsocks.service 2>/dev/null
+  systemctl disable dnstt 2>/dev/null; systemctl disable redsocks.service 2>/dev/null
+  clear
+  cat > /etc/systemd/system/dnstt.service <<EOF
+[Unit]
+Description=SlowDNS Project Rerechan Autoscript Service
+Documentation=https://t.me/project_rerechan
+After=network.target nss-lookup.target
+
+[Service]
+Type=simple
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ExecStart=/usr/sbin/dns-server -udp :5300 -privkey-file /etc/slowdns/server.key $ns 127.0.0.1:111
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable dnstt
+  systemctl start dnstt
+}
+
+add_iptables_openvpn() {
+  # Pastikan rule SSH SlowDNS tidak aktif
+  del_iptables_ssh
+  iptables -I INPUT -p udp --dport 25000 -j ACCEPT
+  iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 25000
+}
+
+del_iptables_openvpn() {
+  # Remove all matching rules for port 25000 and REDIRECT to 25000 (handle multiple rules)
+  while iptables -C INPUT -p udp --dport 25000 -j ACCEPT 2>/dev/null; do
+    iptables -D INPUT -p udp --dport 25000 -j ACCEPT
+  done
+  while iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 25000 2>/dev/null; do
+    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 25000
+  done
+}
+
+# =================== INSTALL & BUILD ===================
+get_core_dns() {
+  header
+  echo -e "${yellow}Checking and installing dependencies...${plain}"
+  REQUIRED_PACKAGES=("curl" "wget" "dnsutils" "git" "screen" "whois" "pwgen" "python" "jq" "fail2ban" "sudo" "gnutls-bin" "mlocate" "dh-make" "libaudit-dev" "build-essential" "dos2unix" "debconf-utils")
+  for package in "${REQUIRED_PACKAGES[@]}"; do
+    if ! dpkg-query -W --showformat='${Status}\n' $package | grep -q "install ok installed"; then
+      apt-get -qq install $package -y &>/dev/null
+    fi
+  done
+
+  echo -e "${yellow}Installing Go...${plain}"
+  rm -fr /usr/bin/go
+  wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
+  sudo tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+  rm -fr go1.22.0.linux-amd64.tar.gz
+  export PATH="/usr/local/go/bin:$PATH"
+  go version
+
+  echo -e "${yellow}Building dnstt-server from source...${plain}"
+  cd /root
+  rm -rf /etc/slowdns
+  git clone https://www.bamsoftware.com/git/dnstt.git
+  cd dnstt/dnstt-server
+  rm -fr go.sum
+  go mod tidy
+  go build
+  mkdir -p /etc/slowdns/
+  mv dnstt-server /etc/slowdns/dns-server 2>/dev/null
+
+  # Move binary to /usr/sbin, fallback to wget if not found
+  if [[ -f /etc/slowdns/dns-server ]]; then
+    mv /etc/slowdns/dns-server /usr/sbin/dns-server 2>/dev/null
+  fi
+  if [[ ! -f /usr/sbin/dns-server ]]; then
+    echo -e "${red}Build failed, downloading prebuilt binary...${plain}"
+    wget -q -O /usr/sbin/dns-server "https://github.com/powermx/dnstt/raw/refs/heads/main/dns-server"
+    chmod +x /usr/sbin/dns-server
+  fi
+
+  echo -e "${green}Generating SlowDNS keys...${plain}"
+  mkdir -p /etc/slowdns
+  /usr/sbin/dns-server -gen-key -privkey-file /etc/slowdns/server.key -pubkey-file /etc/slowdns/server.pub
+  echo -e "${green}SlowDNS core installed successfully!${plain}"
+  pause
+}
+
+input_nameserver() {
+  _Active=$(systemctl is-active systemd-resolved)
+  if [[ "${_Active}" == "inactive" ]]; then
+    systemctl enable systemd-resolved
+    systemctl start systemd-resolved
+  fi
+  for nsip in 1.1.1.1 8.8.8.8 8.8.4.4; do
+    if ! grep -qw "nameserver $nsip" /etc/resolv.conf; then
+      echo "nameserver $nsip" >> /etc/resolv.conf
+    fi
+  done
+  systemctl restart systemd-resolved
+}
+
+gen_key() {
+  mkdir -p /etc/slowdns
+  echo "79165a5f041150b665db82f16d33be2664749ea5dd0e90c62c1ff99de02a375d" > /etc/slowdns/server.key
+  echo "5bb04eb5c1d8e8ced2feefd2a3b7e4d57cf648dce0d5a225ac62197729336f50" > /etc/slowdns/server.pub
+}
+
+ask_nameserver() {
+  header
+  echo -e " \033[0;36mYour Nameserver : \033[0m"
+  read -rp " " Nameserver
+  echo -e ""
+  if [[ "${Nameserver}" =~ ^[a-zA-Z0-9\.\-]+$ ]]; then
+    echo "${Nameserver}" > /etc/slowdns/nameserver
+  else
+    echo -e " ${red}${Nameserver}${plain} is Wrong"
+    echo -e ""
+    footer
+    exit 1
+  fi
+}
+
+change_nameserver() {
+  header
+  current_ns=$(cat /etc/slowdns/nameserver 2>/dev/null)
+  echo -e "${yellow}Current Nameserver:${plain} ${cyan}${current_ns}${plain}"
+  echo -e " \033[0;36mNew Nameserver : \033[0m"
+  read -rp " " Nameserver
+  echo -e ""
+  if [[ "${Nameserver}" =~ ^[a-zA-Z0-9\.\-]+$ ]]; then
+    echo "${Nameserver}" > /etc/slowdns/nameserver
+    # Update nameserver in systemd service file if exists
+    if [[ -f /etc/systemd/system/dnstt.service ]]; then
+      sed -i "s|\(-privkey-file /etc/slowdns/server.key \)[^ ]*\( 127.0.0.1:111\)|\1${Nameserver}\2|" /etc/systemd/system/dnstt.service
+      systemctl daemon-reload
+      systemctl restart dnstt
+    fi
+    echo -e "${green}Nameserver updated successfully!${plain}"
+  else
+    echo -e " ${red}${Nameserver}${plain} is Wrong"
+    echo -e ""
+    footer
+    exit 1
+  fi
+  pause
+}
+
+# =================== SERVICE CONTROL ===================
+start_dns_ssh() {
+  # Only ask nameserver if not set
+  if [[ ! -s /etc/slowdns/nameserver ]]; then
+    ask_nameserver
+  fi
+  add_iptables_ssh
+  stat_net=$(ps aux | grep "[d]ns-server")
+  header
+  if [[ "${stat_net}" != "" ]]; then
+    show_status "enabled"
+    show_dns_info
+    footer
+  else
+    show_status "disabled"
+    echo -e " ${red}Failed to enable SlowDNS${plain}"
+    footer
+  fi
+  pause
+}
+
+stop_dns_ssh() {
+  del_iptables_ssh
+  header
+  show_status "disabled"
+  footer
+  pause
+}
+
+start_dns_openvpn() {
+  add_iptables_openvpn
+  header
+  echo -e "${green}[✔] DNS OpenVPN is ENABLED${plain}"
+  footer
+  pause
+}
+
+stop_dns_openvpn() {
+  del_iptables_openvpn
+  header
+  echo -e "${red}[✘] DNS OpenVPN is DISABLED${plain}"
+  footer
+  pause
+}
+
+change_to_ssh() {
+  del_iptables_openvpn
+  start_dns_ssh
+}
+
+change_to_openvpn() {
+  del_iptables_ssh
+  start_dns_openvpn
+}
+
+install() {
+  if [ ! -e /usr/sbin/dns-server ]; then
+    get_core_dns
+    input_nameserver
+    gen_key
+    ask_nameserver
+  fi
+}
+
+# =================== MAIN MENU ===================
+menu_dns() {
+  install
+  while true; do
+    port_openvpn=$(iptables -t nat -L | grep -w "25000")
+    port_slowdns=$(iptables -t nat -L | grep -w "5300")
+    header
+    # If both rules are active, clean up all rules first
+    if [[ -n "$port_openvpn" && -n "$port_slowdns" ]]; then
+      echo -e "${red}Detected both SlowDNS SSH and DNS OpenVPN rules active!${plain}"
+      echo -e "${yellow}Cleaning up all conflicting iptables rules...${plain}"
+      del_iptables_ssh
+      del_iptables_openvpn
+      echo -e "${green}All SlowDNS/OpenVPN iptables rules have been removed.${plain}"
+      pause
+      continue
+    fi
+    if [[ -z "$port_openvpn" && -z "$port_slowdns" ]]; then
+      # No DNS active
+      echo -e "${bold}${yellow}   1.)  Start SlowDNS SSH${plain}"
+      echo -e "${bold}${yellow}   2.)  Start DNS OpenVPN${plain}"
+      echo -e "${bold}${yellow}   3.)  Change Nameserver${plain}"
+      echo -e "${bold}${yellow}   x.)  Exit${plain}"
+      draw_line
+      read -p " Select from options [1-3 or x] : " port
+      case ${port} in
+        1) start_dns_ssh ;;
+        2) start_dns_openvpn ;;
+        3) change_nameserver ;;
+        x|X) clear; exit 0 ;;
+        *) echo -e " ${red}Please enter a correct number${plain}"; pause ;;
+      esac
+    elif [[ -n "$port_slowdns" && -z "$port_openvpn" ]]; then
+      # SlowDNS SSH active
+      echo -e "${bold}${yellow}   1.)  Stop SlowDNS SSH${plain}"
+      echo -e "${bold}${yellow}   2.)  Change SSH to OpenVPN${plain}"
+      echo -e "${bold}${yellow}   3.)  Change Nameserver${plain}"
+      echo -e "${bold}${yellow}   x.)  Exit${plain}"
+      draw_line
+      read -p " Select from options [1-3 or x] : " port
+      case ${port} in
+        1) stop_dns_ssh ;;
+        2) change_to_openvpn ;;
+        3) change_nameserver ;;
+        x|X) clear; exit 0 ;;
+        *) echo -e " ${red}Please enter a correct number${plain}"; pause ;;
+      esac
+    elif [[ -n "$port_openvpn" && -z "$port_slowdns" ]]; then
+      # DNS OpenVPN active
+      echo -e "${bold}${yellow}   1.)  Stop DNS OpenVPN${plain}"
+      echo -e "${bold}${yellow}   2.)  Change OpenVPN to SSH${plain}"
+      echo -e "${bold}${yellow}   3.)  Change Nameserver${plain}"
+      echo -e "${bold}${yellow}   x.)  Exit${plain}"
+      draw_line
+      read -p " Select from options [1-3 or x] : " port
+      case ${port} in
+        1) stop_dns_openvpn ;;
+        2) change_to_ssh ;;
+        3) change_nameserver ;;
+        x|X) clear; exit 0 ;;
+        *) echo -e " ${red}Please enter a correct number${plain}"; pause ;;
+      esac
+    fi
+  done
+}
+
+menu_dns

@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+red='\033[0;31m'
+green='\033[0;32m'
+Font="\033[0m"
+total_ram=$(grep "MemTotal: " /proc/meminfo | awk '{ print $2}')
+totalram=$(($total_ram / 1024))
+lastdomain="$(cat /usr/local/etc/v2ray/domain)"
+ipsaya=$(curl -s http://checkip.amazonaws.com)
+asn_info=$(timeout 5 curl -s "http://ip-api.com/json/$ipsaya" | jq -r '.isp // "Unknown ISP"')
+function get_acme_domain() {
+    echo -e "${green}--->${Font}    Start "
+    iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 2080
+    systemctl stop nginx
+    pkill sslh
+    systemctl stop sslh
+    echo -e "${green}--->${Font}    Starting renew cert "
+    sleep 2
+    echo -e "${green}--->$NC     Getting acme for cert"
+    domain=$(cat /usr/local/etc/v2ray/domain)
+    /root/.acme.sh/acme.sh --upgrade --auto-upgrade >/dev/null 2>&1
+    /root/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
+    /root/.acme.sh/acme.sh --issue -d $domain --standalone -k ec-256 >/dev/null 2>&1
+    ~/.acme.sh/acme.sh --installcert -d $domain --fullchainpath /usr/local/etc/v2ray/v2ray.crt --keypath /usr/local/etc/v2ray/v2ray.key --ecc >/dev/null 2>&1
+    echo -e "${green}--->${Font}    Renew cert done "
+    systemctl restart nginx >/dev/null 2>&1
+    systemctl restart sslh >/dev/null 2>&1
+    systemctl restart v2ray >/dev/null 2>&1
+    iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 2080
+    sleep 5
+    echo ""
+    echo ""
+}
+function renew_domain() {
+    read -rp "Input ur Domain/Host : " -e domain
+    rm -rf /usr/local/etc/v2ray/domain
+    mv /usr/local/etc/v2ray/domain /usr/local/etc/v2ray/domain.old
+    echo "$domain" > /usr/local/etc/v2ray/domain
+    old_domain=$(/usr/local/etc/v2ray/domain.old)
+    sed -i 's/${old_domain}/${domain}/g' /etc/nginx/*
+    echo $domain >/usr/local/etc/v2ray/domain
+    get_acme_domain
+}
+
+clear
+echo -e "───────────────────────────"
+echo -e "Hostname   : $lastdomain"
+echo -e "Public ip  : $ipsaya"
+echo -e "Total RAM  : $totalram MB"
+echo -e "───────────────────────────"
+echo -e "1). MANUAL POINTING"
+echo -e "2). Renew Certificate"
+echo -e ""
+read -p "what do you choose[ 1 - 2 ] : " NUM_MENU
+
+case $NUM_MENU in
+1)
+    renew_domain
+    ;;
+2)
+    get_acme_domain
+    ;;
+*)
+    echo -e "${red}You wrong command !${Font}"
+    ;;
+esac

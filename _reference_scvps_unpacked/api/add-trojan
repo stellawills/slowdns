@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+# ========================================================
+
+# Fungsi untuk mencetak pesan berwarna merah
+red() { echo -e "\\033[32;1m${*}\\033[0m"; }
+
+# Membaca domain dari file
+domain=$(cat /usr/local/etc/v2ray/domain)
+
+# Membaca input JSON dari API
+input_data=$(cat)
+
+# Ekstrak data dari JSON
+user=$(echo "$input_data" | jq -r '.user')
+masaaktif=$(echo "$input_data" | jq -r '.masaaktif')
+
+# Validasi jika user sudah ada
+CLIENT_EXISTS=$(grep -w $user /usr/local/etc/v2ray/config.json | wc -l)
+if [[ ${CLIENT_EXISTS} == '1' ]]; then
+    echo -e "{\"status\": \"false\", \"message\": \"User already exists, please choose another name.\"}"
+    exit 1
+fi
+
+# Validasi password jika kosong atau tidak valid
+password=$(cat /proc/sys/kernel/random/uuid)
+
+# Hitung tanggal kedaluwarsa
+exp=$(date -d "$masaaktif days" +"%Y-%m-%d")
+
+# Menambahkan user baru ke config.json
+sed -i '/#trojan$/a\#! '"$user $exp"'\
+},{"password": "'""$password""'","email": "'""$user""'"' /usr/local/etc/v2ray/config.json
+
+# Restart V2Ray
+systemctl restart v2ray
+
+# Membuat link Trojan WS dan GRPC
+trojanlink="trojan://${password}@${domain}:443?path=%2Ftrojan-ws&security=tls&host=${domain}&type=ws&sni=${domain}#${user}"
+trojanlink1="trojan://${password}@${domain}:443?mode=gun&security=tls&type=grpc&serviceName=trojan-grpc&sni=${domain}#${user}"
+
+# Response data dalam format JSON
+response=$(cat <<EOF
+{
+    "status": "true",
+    "code": 200,
+    "message": "Akun Trojan berhasil dibuat",
+    "user": "$user",
+    "domain": "$domain",
+    "password": "$password",
+    "https": "443",
+    "grpc": "443",
+    "path": "/trojan-ws",
+    "service_name": "trojan-grpc",
+    "links": {
+        "ws": "$trojanlink",
+        "grpc": "$trojanlink1"
+    },
+    "expiration_date": "$exp"
+}
+EOF
+)
+
+# Outputkan respons dalam format JSON
+clear
+echo -e "$response"

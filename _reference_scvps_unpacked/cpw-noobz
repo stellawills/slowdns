@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+data="/etc/noobzvpns/.noobz.db"
+clear
+echo "=========================="
+echo "Database Contents:"
+echo "=========================="
+cat ${data} | grep "#noobzvpns#" | awk '{print $2, $3}'
+echo "=========================="
+
+read -p "Input Username: " username
+
+current_password=$(awk -v user="$username" '$2 == user {print $3}' ${data})
+
+if [ -z "$current_password" ]; then
+    echo "Username Not Found."
+    exit 1
+fi
+
+echo "Username: $username"
+echo "Password: $current_password"
+
+read -p "Input New Password: " new_password
+
+if [ -z "$new_password" ]; then
+    echo "Password Not Changed."
+    exit 0
+fi
+
+noobzvpns edit ${username} -p ${new_password}
+awk -v user="$username" -v new_password="$new_password" 'BEGIN {FS=OFS=" "} 
+$2 == user {$3 = new_password} {print}' ${data} > ${data}.tmp && mv ${data}.tmp ${data}
+
+clear
+echo -e "
+Success Change Password
+=============================
+Username: ${username}@fn-project
+Old Password: ${current_password}
+New Password: ${new_password}
+============================="

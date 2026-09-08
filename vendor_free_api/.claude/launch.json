@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "license-server-preview",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["-S", "localhost:8787", "license_server_php/dev_router.php"],
+      "port": 8787
+    }
+  ]
+}

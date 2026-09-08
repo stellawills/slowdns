@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+clear
+
+botmenu() {
+clear
+
+lanjut() {
+rm -fr /usr/local/etc/v2ray/client.id
+rm -fr /usr/local/etc/v2ray/bot.key
+echo "$api" > /usr/local/etc/v2ray/bot.key
+echo "$itd" > /usr/local/etc/v2ray/client.id
+clear
+echo -e "
+Your Data Bot Notirication
+===========================
+API Bot: $api
+Chatid Own: $itd
+===========================
+"
+}
+
+add() {
+clear
+echo -e "
+===================
+[ 设置机7器人通知 ]
+===================
+"
+read -p "API Key Bot: " api
+read -p "Your Chat ID: " itd
+clear
+echo -e "
+Information
+==============================
+API Bot: $api
+Chatid : $itd
+==============================
+"
+read -p "Is the data above correct? (y/n): " opw
+case $opw in
+y) clear ; lanjut ;;
+n) clear ; add ;;
+*) clear ; add ;;
+esac
+}
+
+mna() {
+echo -e "
+======================
+[   菜单设置机器人   ]
+======================
+
+1. Setup Bot Notification
+2. Setup Bot Panel All Menu
+3. Setup Bot WhatsApp Panel
+4. Setup Bot Reseller / Store VPN
+0. Back To Menu System
+======================
+Press CTRL + C to exit
+"
+read -p "Input Option: " apws
+case $apws in
+1) clear ; add ;;
+2) clear ; clear ; echo -e "\n Coming Soon" ;;
+3) clear ; clear ; echo -e "\n Coming Soon" ;;
+4) clear ; clear ; echo -e "\n Coming Soon" ;;
+0) clear ; menu-system ;;
+*) clear ; mna ;;
+esac
+}
+
+mna
+}
+
+botmenu

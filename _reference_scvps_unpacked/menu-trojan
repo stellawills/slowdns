@@ -1,0 +1,25 @@
+#!/bin/bash
+
+clear
+
+echo -e "────────────────────────────"
+echo -e "      Menu V2ray Trojan      "
+echo -e "────────────────────────────"
+echo -e "1. Create Trojan Account "
+echo -e "2. Cek    Trojan Login "
+echo -e "3. Delete Trojan Account "
+echo -e "4. Renew  Trojan Account "
+echo -e "5. Trafik Trojan Account "
+echo -e "────────────────────────────"
+echo -e "0. Back To Main Menu "
+echo -e "────────────────────────────"
+read -p "Input Options: " opw
+case $opw in
+1) add-tr ;;
+2) cek-tr ;;
+3) del-tr ;;
+4) renew-tr ;;
+5) trafik-tr ;;
+0) menu ;;
+*) menu-tr ;;
+esac

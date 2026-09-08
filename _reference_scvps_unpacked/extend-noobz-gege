@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+JSON_FILE="/etc/noobzvpns/db_user.json"
+
+# Warna terminal
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+get_expired_date() {
+  local issued="$1"
+  local expired="$2"
+  local issued_timestamp
+  local expired_timestamp
+  local expired_date
+
+  issued_timestamp=$(date --date="$issued" +%s 2>/dev/null)
+  
+  if [ $? -ne 0 ]; then
+    echo "Invalid Date"
+    return
+  fi
+
+  expired_timestamp=$((issued_timestamp + expired * 86400)) # 86400 detik per hari
+  expired_date=$(date -d "@$expired_timestamp" "+%Y-%m-%d %H:%M:%S")
+  
+  echo "$expired_date"
+}
+
+display_user_info() {
+  local user="$1"
+  local expired="$2"
+  
+  echo -e "${BOLD}Username         :${NC} $user"
+  echo -e "Expired          : $expired"
+  echo -e "------------------------------"
+}
+
+check_json_file() {
+  if [ ! -f "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File Database Not Found${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File not found\"}${NC}"
+    exit 1
+  fi
+
+  if [ ! -s "$JSON_FILE" ]; then
+    echo -e "${RED}404 Not Found${NC}: File is empty${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"File is empty\"}${NC}"
+    exit 1
+  fi
+
+  if ! jq empty "$JSON_FILE" 2>/dev/null; then
+    echo -e "${RED}404 Not Found${NC}: Invalid JSON format${NC}"
+    echo -e "${RED}API Response${NC}: {\"error\": \"Invalid JSON format\"}${NC}"
+    exit 1
+  fi
+
+  echo -e "${GREEN}200 OK${NC}: File found and valid${NC}"
+}
+
+list_accounts() {
+clear
+  check_json_file
+
+  echo -e "${BOLD}List Account Noobzvpns${NC}"
+  echo "==========================="
+
+  jq -r '.users | to_entries[] | [.key, .value.expired, .value.issued] | @tsv' "$JSON_FILE" |
+  while IFS=$'\t' read -r user expired issued; do
+
+    expired_date=$(get_expired_date "$issued" "$expired")
+
+    display_user_info "$user" "$expired_date"
+  done
+}
+
+expired1() {
+  local user="$1"
+  jq -r --arg user "$user" '.users[$user] | [.expired, .issued] | @tsv' "$JSON_FILE" |
+  while IFS=$'\t' read -r expired issued; do
+    get_expired_date "$issued" "$expired"
+  done
+}
+
+renew1() {
+username=$1
+
+noobzvpns renew $username
+expired2=$(expired1 "$username")
+clear
+check_json_file
+echo -e "
+╔=============================╗
+ Success Renew NoobzVPN
+ =============================
+ Username: ${username}@fn-project
+ New Expired: $expired2
+╚=============================╝"
+}
+
+check_username_validity() {
+  local username="$1"
+
+  if jq -e --arg user "$username" '.users[$user]' "$JSON_FILE" > /dev/null; then
+    echo -e "${GREEN}200 OK${NC}: Username found"
+  else
+    echo -e "${RED}404 Not Found${NC}: Username not found"
+    exit 1
+  fi
+}
+
+list_accounts
+read -p "Input Username: " username
+check_username_validity $username
+while true; do
+  read -rp "Renew $username (y/n): " renew
+  if [[ -z "$renew" ]]; then
+    echo -e "${RED}Invalid input${NC}: No input provided."
+    continue
+  fi
+
+  case "$renew" in
+    y|Y)
+      renew1 "$username"
+      break
+      ;;
+    n|N)
+      echo -e "${GREEN}Canceled by user.${NC}"
+      exit 0
+      ;;
+    *)
+      echo -e "${RED}Invalid input${NC}: Please enter y or n."
+      ;;
+  esac
+done

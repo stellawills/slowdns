@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+red() { echo -e "\\033[32;1m${*}\\033[0m"; }
+clear
+NUMBER_OF_CLIENTS=$(grep -c -E "^#& " "/usr/local/etc/v2ray/config.json")
+if [[ ${NUMBER_OF_CLIENTS} == '0' ]]; then
+    echo -e "───────────────────────────"
+    echo -e "    DELETE VLESS ACCOUNT   "
+    echo -e "───────────────────────────"
+    echo ""
+    echo "You have no existing clients!"
+    echo ""
+    echo -e "───────────────────────────"
+    read -n 1 -s -r -p "Press any key to back on menu"
+    menu
+fi
+
+clear
+echo -e "───────────────────────────"
+echo -e "    DELETE VLESS ACCOUNT   "
+echo -e "───────────────────────────"
+echo "  User       Expired  "
+echo -e "───────────────────────────"
+grep -E "^#& " "/usr/local/etc/v2ray/config.json" | cut -d ' ' -f 2-3 | column -t | sort | uniq
+echo ""
+red "tap enter to go back"
+echo -e "───────────────────────────"
+read -rp "Input Username : " user
+if [ -z $user ]; then
+    menu
+else
+    exp=$(grep -wE "^#& $user" "/usr/local/etc/v2ray/config.json" | cut -d ' ' -f 3 | sort | uniq)
+    sed -i "/^#& $user $exp/,/^},{/d" /usr/local/etc/v2ray/config.json
+    systemctl restart v2ray >/dev/null 2>&1
+    clear
+    echo -e "───────────────────────────"
+    echo -e "ACCOUNT DELETE SUCCESSFULLY"
+    echo -e "───────────────────────────"
+    echo -e " Client Name : $user"
+    echo -e " Expired On  : $exp"
+    echo -e "───────────────────────────"
+    echo ""
+    
+fi

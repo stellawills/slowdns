@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+#          Redistribution, resale, or reuse of this code in any form
+#          without explicit written permission from the author is prohibited.
+#          Selling this code or its derivatives is strictly forbidden.
+# ========================================================
+
+# File database JSON dan file login
+DB_FILE="/etc/noobzvpns/db_user.json"
+DB_LOGIN_FILE="/etc/noobzvpns/.noobz.db"
+
+convert_bytes() {
+    local bytes=$1
+    local suffix=("B" "KB" "MB" "GB" "TB" "PB" "EB" "ZB" "YB")
+    local i=0
+    while ((bytes >= 1024 && i < ${#suffix[@]}-1)); do
+        bytes=$((bytes / 1024))
+        i=$((i + 1))
+    done
+    echo "$bytes ${suffix[$i]}"
+}
+
+cek_user_login() {
+    clear
+    echo "────────────────────────────────────────────────────"
+    echo "** Cek User Login NoobzVPN **"
+    echo "────────────────────────────────────────────────────"
+    
+    jq -r '.users | keys[]' "$DB_FILE" | while read username; do
+        user_info=$(jq -r ".users[\"$username\"]" "$DB_FILE")
+
+        up=$(echo "$user_info" | jq -r ".statistic.bytes_usage.up")
+        down=$(echo "$user_info" | jq -r ".statistic.bytes_usage.down")
+        devices=$(echo "$user_info" | jq -r ".devices")
+        active_devices=$(echo "$user_info" | jq -r ".statistic.active_devices[]?")
+        limit=$(echo "$user_info" | jq -r ".devices")
+
+        up_byte=$((up))
+        down_byte=$((down))
+
+        total_usage=$((up_byte + down_byte))
+
+        up_human=$(convert_bytes $up_byte)
+        down_human=$(convert_bytes $down_byte)
+        total_usage_human=$(convert_bytes $total_usage)
+
+        if [ ! -z "$active_devices" ]; then
+            echo "Username: $username"
+            echo "Upload & Download: $up_human / $down_human"
+            echo "Total Usage Bandwidth: $total_usage_human"
+            echo "Total User Login Device: $(echo "$active_devices" | wc -l) / $limit"
+            echo "Hash Device Login:"
+            echo "$active_devices"
+            echo "────────────────────────────────────────────────────"
+        fi
+    done
+}
+
+cek_user_login

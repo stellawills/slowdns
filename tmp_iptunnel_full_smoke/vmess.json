@@ -1,0 +1,46 @@
+{
+  "inbounds": [
+    {
+      "settings": {
+        "clients": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": "alice",
+            "alterId": 0
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws"
+      }
+    },
+    {
+      "settings": {
+        "clients": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": "alice",
+            "alterId": 0
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc"
+      }
+    },
+    {
+      "settings": {
+        "clients": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": "alice",
+            "alterId": 0
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "httpupgrade"
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Ambil data stats
+stats=$(v2ray api stats -server 127.0.0.1:10085 2>/dev/null)
+total_all=$(echo "$stats" | grep "Total:" | awk '{print $2}')
+
+# Ambil list user unik dari config.json
+users=$(grep "###" /usr/local/etc/v2ray/config.json | awk '{print $2}' | sort | uniq)
+
+# Fungsi konversi satuan ke bentuk auto
+convert_auto_unit() {
+    local mb=$1
+    awk -v mb="$mb" 'BEGIN {
+        if (mb >= 1024*1024)
+            printf "%.2f TB", mb/1024/1024;
+        else if (mb >= 1024)
+            printf "%.2f GB", mb/1024;
+        else
+            printf "%.2f MB", mb;
+    }'
+}
+
+# Konversi ke MB untuk perhitungan total
+to_mb() {
+    local size=$1
+    [[ -z "$size" ]] && echo 0 && return
+    echo "$size" | awk '
+    /KB$/ {val=substr($1,1,length($1)-2); print val/1024}
+    /MB$/ {val=substr($1,1,length($1)-2); print val}
+    /GB$/ {val=substr($1,1,length($1)-2); print val*1024}
+    /B$/ && !/KB|MB|GB/ {val=substr($1,1,length($1)-1); print val/1024/1024}
+    '
+}
+
+# Ambil traffic server
+in_api=$(echo "$stats" | grep "inbound>>>api>>>traffic>>>downlink" | awk '{print $2}')
+out_api=$(echo "$stats" | grep "inbound>>>api>>>traffic>>>uplink" | awk '{print $2}')
+
+# Hitung total server
+in_api_mb=$(to_mb "$in_api")
+out_api_mb=$(to_mb "$out_api")
+total_server=$(echo "$in_api_mb + $out_api_mb" | bc)
+
+# Clear Screen
+clear
+
+# Main Menu
+echo "======"
+echo "Trafik Vmess"
+echo "======"
+echo "[ server ]"
+echo "inbound : $(convert_auto_unit $in_api_mb)"
+echo "outbound: $(convert_auto_unit $out_api_mb)"
+printf "server total: %s\n\n" "$(convert_auto_unit "$total_server")"
+
+# Tampilkan bagian user
+echo "======"
+echo "[ user ]"
+for user in $users; do
+    down=$(echo "$stats" | grep "user>>>$user>>>traffic>>>downlink" | awk '{print $2}')
+    up=$(echo "$stats" | grep "user>>>$user>>>traffic>>>uplink" | awk '{print $2}')
+
+    if [[ -n "$down" || -n "$up" ]]; then
+        down_mb=$(to_mb "$down")
+        up_mb=$(to_mb "$up")
+        total=$(echo "$down_mb + $up_mb" | bc)
+        echo "$user: $(convert_auto_unit "$down_mb") / $(convert_auto_unit "$up_mb") / $(convert_auto_unit "$total")"
+    fi
+done
+echo "======"
+echo "Total: ${total_all}"
+echo "======"

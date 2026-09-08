@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# ========================================================
+# Credit Code By Project Rerechan
+# Author: Rerechan02 (DindaPutriFN)
+# License: This configuration is licensed for personal or internal use only.
+# ========================================================
+
+# Data
+domain=$(cat /usr/local/etc/v2ray/domain)
+if [[ -s /root/.ip ]]; then
+  ip=$(cat /root/.ip)
+else
+  ip=$(hostname -I | awk '{print $1}')
+fi
+
+nameserver=$(cat /etc/slowdns/nameserver 2>/dev/null)
+pubkey=$(cat /etc/slowdns/server.pub 2>/dev/null)
+
+# Cek apakah kosong
+if [[ -z "$nameserver" ]]; then
+    nameserver="not set"
+fi
+
+if [[ -z "$pubkey" ]]; then
+    pubkey="not set"
+fi
+
+# Fungsi untuk mengecek apakah username sudah ada
+cek_username() {
+  if id "$1" &>/dev/null; then
+    echo "{\"status\": \"false\", \"code\": 400, \"message\": \"Username '$1' is already in use\"}"
+    exit 1
+  else
+   clear
+  fi
+}
+
+# Membaca input JSON dari API
+input_data=$(cat)
+
+# Ekstrak data dari JSON
+username=$(echo "$input_data" | jq -r '.username')
+password=$(echo "$input_data" | jq -r '.password')
+masa=$(echo "$input_data" | jq -r '.masa')
+
+# Cek ketersediaan username
+cek_username "$username"
+
+# Hitung tanggal kedaluwarsa
+exp=$(date +%F -d "$masa days")
+
+# Buat akun SSH
+useradd -e $exp -M -N -s /bin/false $username && echo "$username:$password" | chpasswd
+
+# Response data
+response=$(cat <<EOF
+{
+    "status": "true",
+    "code": 200,
+    "message": "Akun SSH berhasil dibuat",
+    "username": "$username",
+    "password": "$password",
+    "domain": "$domain",
+    "ip": "$ip",
+    "expired_on": "$exp",
+    "ports": {
+        "ssh": "443",
+        "ws_http": "80, 2082",
+        "ws_tls": "443",
+        "socks5": "443, 1080",
+        "udp_custom": "1-65535 & 36712",
+        "badvpn": "7300",
+        "slowdns": "53, 5300"
+    },
+    "slowdns": {
+          "dns": "1.1.1.1, 8.8.8.8",
+          "nameserver": "${nameserver}",
+          "publik_key": "${pubkey}"    
+    },
+    "config": "${domain}:1-65535@${username}:${password}",
+    "payload": "GET /ssh HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]"
+}
+EOF
+)
+
+# Outputkan respons dalam format JSON
+clear
+echo -e "$response"

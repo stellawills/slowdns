@@ -1,0 +1,20 @@
+[Unit]
+Description=IPTunnel managed OpenVPN session monitor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/iptunnel/provisioning_monitor.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/iptunnel-provisioning /run/iptunnel-provisioning
+
+[Install]
+WantedBy=multi-user.target

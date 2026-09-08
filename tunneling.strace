@@ -1,0 +1,681 @@
+16453 execve("/root/tunneling", ["/root/tunneling"], 0x7ffefc8858a8 /* 24 vars */) = 0
+16457 execve("/usr/bin/rm", ["rm", "-rf", "/tmp/shift"], 0xc00007e750 /* 24 vars */) = 0
+16457 +++ exited with 0 +++
+16453 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16457, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16458 execve("/usr/bin/mkdir", ["mkdir", "/tmp/shift"], 0xc00007eb60 /* 24 vars */) = 0
+16458 +++ exited with 0 +++
+16453 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16458, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16459 execve("/usr/bin/curl", ["curl", "-4", "-H", "x-api-key: potato", "-LksS", "-o", "/tmp/shift/ins", "https://cloud.potatonc.com/v2/download/1.ruby"], 0xc00007ef70 /* 24 vars */) = 0
+16460 +++ exited with 0 +++
+16459 +++ exited with 0 +++
+16453 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16459, si_uid=0, si_status=0, si_utime=1, si_stime=1} ---
+16461 execve("/usr/bin/chmod", ["chmod", "777", "/tmp/shift/ins"], 0xc00007f380 /* 24 vars */) = 0
+16461 +++ exited with 0 +++
+16453 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16461, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16462 execve("/tmp/shift/ins", ["/tmp/shift/ins"], 0xc00007f450 /* 24 vars */) = 0
+16462 execve("/bin/bash", ["/tmp/shift/ins", "-c", "exec '/tmp/shift/ins' \"$@\"", "/tmp/shift/ins"], 0x55c23059d2e0 /* 25 vars */) = 0
+16462 execve("/tmp/shift/ins", ["/tmp/shift/ins"], 0x558069e98040 /* 25 vars */) = 0
+16462 execve("/bin/bash", ["/tmp/shift/ins", "-c", "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                #!/bin/bash\n\nYellow='\\033[0;33m'\nBlue='\\033[0;34m'\nPurple='\\033[0;35m'\nGreen=\"\\033[32m\"\nRed=\"\\033[31m\"\nWhiteB=\"\\e[5;37;40m\"\nBlueCyan=\"\\e[5;36;40m\"\nGreen_background=\"\\033[42;37m\"\nRed_background=\"\\033[41;37m\"\nSuffix=\"\\033[0m\"\n\nexport DEBIAN_FRONTEND=noninteractive\nPKG=\"apt-get install -y\"\nIPMOD=\"$(cat /root/.ipmod | tr -d '\\n')\"\nCURL=\"curl -$IPMOD -LksS --max-time 30\"\nmkdir -p /tmp/install\nTEMP=\"/tmp/install\"\nREPOSITORY=\"https://cloud.potatonc.com\"\n\ncp /etc/resolv.conf /root/.resolv.conf\n\nsource /etc/os-release\n\necho iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections\necho iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections\n\nResultErr() {\n  echo \"\"\n  echo -e \" $Red$1$Suffix\"\n  echo \"\"\n}\n\nResultSuccess() {\n  echo \"\"\n  echo -e \" $Green$1$Suffix\"\n  echo \"\"\n}\n\nLane() {\n  echo -e \" ${BlueCyan}\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224\342\200\224${Suffix}\"\n}\n\nISRoot() {\n  local dir=\"/usr/sbin/potatonc\"\n  \n\tif [ $EUID -ne 0 ]; then\n    LOGO | tee ${TEMP}/isRoot\n\t\techo -e \" ${Red}You need to run this script as ${Yellow}root${Suffix}\" | tee -a ${TEMP}/isRoot\n\t\trm -rf \"$dir\" > /dev/null 2>&1\n    Credit_Potato | tee -a ${TEMP}/isRoot\n    exit 1\n\tfi\n}\n\nOpenVZ() {\n  local dir=\"/usr/sbin/potatonc\"\n  \n  if [ $(systemd-detect-virt) == \"openvz\" ]; then\n    LOGO | tee ${TEMP}/openvz\n\t\techo -e \" ${Red}OpenVZ is not supported${Suffix}\" | tee -a ${TEMP}/openvz\n\t\trm -rf \"$dir\" > /dev/null 2>&1\n    Credit_Potato | tee -a ${TEMP}/openvz\n    exit 1\n  fi\n}\n\nScriptInstallatiosIfExists() {\n  local dir=\"/usr/sbin/potatonc\"\n  \n  if [ -e \"$dir\" ]; then\n    LOGO | tee ${TEMP}/check\n    echo -e \"     ${Green}You have installed the script${Suffix}\" | tee -a ${TEMP}/check\n    echo \"\" | tee -a ${TEMP}/check\n    echo -e \" ${BlueCyan}=====================================================${Suffix}\" | tee -a ${TEMP}/check\n    echo \"\" | tee -a ${TEMP}/check\n    #rm -rf \"$dir\" > /dev/null 2>&1\n    Credit_Potato | tee -a ${TEMP}/check\n    exit 1\n  fi\n}\n\nInstallPythonDua() {\n  if [[ $ID == 'ubuntu' ]]; then\n    cd /tmp\n    DownloadFile \"Python-2.7.18.tgz\" \"$REPOSITORY/v2/download/Python-2.7.18.tgz\" \"Py-Config\"\n    tar xzf Python-2.7.18.tgz\n    cd Python-2.7.18\n    ./configure --enable-optimizations\n    make altinstall\n    #make\n    #make install\n    \n    if [[ -e /usr/bin/python ]]; then\n      rm -f /usr/bin/python\n    fi\n    \n    ln -s \"/usr/local/bin/python2.7\" \"/usr/bin/python\"\n    \n    cd ..\n    rm -rf Python-2.7.18\n    rm -f Python-2.7.18.tgz\n  fi\n  \n  if [[ $ID == 'debian' ]]; then\n    DownloadFile \"py1.deb\" \"$REPOSITORY/v2/download/py1\" \"py1\"\n    DownloadFile \"py2.deb\" \"$REPOSITORY/v2/download/py2\" \"py2\"\n    DownloadFile \"py3.deb\" \"$REPOSITORY/v2/download/py3\" \"py3\"\n    DownloadFile \"py4.deb\" \"$REPOSITORY/v2/download/py4\" \"py4\"\n    DownloadFile \"py5.deb\" \"$REPOSITORY/v2/download/py5\" \"py5\"\n    DownloadFile \"py6.deb\" \"$REPOSITORY/v2/download/py6\" \"py6\"\n    \n    dpkg --force-confold -i py1.deb py2.deb py3.deb py4.deb py5.deb py6.deb\n    \n    rm -f py1.deb py2.deb py3.deb py4.deb py5.deb py6.deb\n    \n    if [[ -e /usr/bin/python ]]; then\n      rm -f /usr/bin/python\n    fi\n    \n    ln -s \"/usr/bin/python2.7\" \"/usr/bin/python\"\n  fi\n}\n\nInstallDependencies() {\n  apt --fix-broken install\n  $PKG wget\n  $PKG curl\n  $PKG git\n  $PKG ruby\n  $PKG zip\n  $PKG unzip\n  $PKG gawk\n  $PKG iptables\n  $PKG iptables-persistent\n  $PKG netfilter-persistent\n  $PKG net-tools\n  $PKG openssl\n  $PKG ca-certificates\n  $PKG gnupg\n  $PKG '^gnupg[2-9]+$'\n  $PKG lsb-release\n  $PKG gcc\n  $PKG make\n  $PKG cmake\n  $PKG screen\n  $PKG socat\n  $PKG apt-transport-https\n  $PKG gnupg1\n  $PKG dnsutils\n  $PKG cron\n  $PKG chrony\n  $PKG libssl-dev\n  $PKG '^libpcre[0-9\\.\\-]+$'\n  $PKG '^libpcre[0-9\\.\\-]+dev$'\n  $PKG zlib1g-dev\n  $PKG nscd\n  $PKG '^python[0-9\\.\\-]+$'\n  $PKG jq\n  $PKG '^liblua[0-9\\.\\-]+$'\n  $PKG '^lua[0-9\\.\\-]+$'\n  $PKG '^liblua[0-9\\.\\-]+dev$'\n  $PKG libsystemd-dev\n  $PKG util-linux\n  $PKG build-essential\n  $PKG '^python[0-9]+-pip$'\n  $PKG ntpdate\n  $PKG software-properties-common\n  $PKG sqlite3\n  $PKG '^libsqlite[1-9\\.\\-]+dev$'\n  $PKG '^sqlite[1-9\\.\\-]+$'\n  $PKG fail2ban\n  $PKG '^libssh[1-9\\.\\-]+$'\n  $PKG '^libssh[1-9\\.\\-]+dev$'\n  $PKG '^php[1-9\\.\\-]+$'\n  $PKG '^php[1-9\\.\\-]+dev$'\n  $PKG apache2\n  $PKG libapache2-mod-php\n  $PKG coreutils\n  #$PKG rsyslog\n  apt-get autoremove -y\n  # dnf group install \"Development Tools\"\n  # dnf install epel-release\n  # dnf install lua\n  # dnf install readline readline-devel\n  if [[ $ID == 'ubuntu' ]]; then\n    $PKG ubuntu-keyring\n  fi\n  if [[ $ID == 'debian' ]]; then\n    $PKG debian-archive-keyring\n    $PKG python-is-python3\n  fi\n  \n  if [[ -n $(which python) ]]; then\n    python --version &> /tmp/.python\n    \n    if [[ -z $(cat /tmp/.python | grep \"^Python 2\") ]]; then\n      rm -f $(which python)\n      \n      if [[ -e /usr/bin/python2 ]]; then\n        ln -s \"/usr/bin/python2\" \"/usr/bin/python\"\n      else\n        InstallPythonDua\n      fi\n    fi\n  else\n    if [[ -e /usr/bin/python2 ]]; then\n      ln -s \"/usr/bin/python2\" \"/usr/bin/python\"\n    else\n      InstallPythonDua\n    fi\n  fi\n  $PKG '^php[1-9\\.\\-]+ssh2$'\n  apt --fix-broken install\n  systemctl stop apache2  > /dev/null 2>&1\n}\n\nInstallDependenciesDnf() {\n  dnf update -y\n  #$PKG epel-release\n  dnf groupinstall \"Development Tools\" -y\n  $PKG nano\n  $PKG readline\n  $PKG readline-devel\n  $PKG lua\n  $PKG wget\n  $PKG curl\n  $PKG ruby\n  $PKG zip\n  $PKG unzip\n  $PKG iptables\n  $PKG jq\n}\n\nPkgIns() {\n  $PKG $1\n}\n\nCheckPkg() {\n  dpkg -s $1 &> /dev/null\n\n  if [ $? -eq 0 ]; then\n    echo -e \" Package $Green$1$Suffix is installed!\"\n  else\n    echo -e \" Package $Red$1$Suffix is NOT installed!\"\n    echo \"\"\n    echo -e \" Try to install Package $Yellow$1$Suffix\"\n    echo \"\"\n    PkgIns $1\n  fi\n}\n\nDeleteRowsDB() {\n  DBCmd\n  \n  if [[ ! -z $($DB \"SELECT * FROM servers\") ]]; then\n    $DB \"DELETE FROM servers\"\n  fi\n  if [[ ! -z $($DB \"SELECT * FROM account_sshs\") ]]; then\n    $DB \"DELETE FROM account_sshs\"\n  fi\n  if [[ ! -z $($DB \"SELECT * FROM account_vmesses\") ]]; then\n    $DB \"DELETE FROM account_vmesses\"\n  fi\n  if [[ ! -z $($DB \"SELECT * FROM account_vlesses\") ]]; then\n    $DB \"DELETE FROM account_vlesses\"\n  fi\n  if [[ ! -z $($DB \"SELECT * FROM account_trojans\") ]]; then\n    $DB \"DELETE FROM account_trojans\"\n  fi\n}\n\nDownloadDB() {\n  InstallDependencies\n  CheckPkg \"curl\"\n  CheckPkg \"jq\"\n  CheckPkg \"sqlite3\"\n  local dir=\"/usr/sbin/potatonc\"\n  if [ ! -e \"$dir\" ]; then\n    mkdir -p $dir\n    \n    for (( ; ; ))\n    do\n      sleep 2\n      if [[ $(CurlWRStatusCode \"$dir/potato.db\" \"$REPOSITORY/v2/download/potato.db\") == 200 ]]; then\n        DeleteRowsDB\n        ResultSuccess \"Downloading success\"\n        break\n      else\n        cat \"$dir/potato.db\"\n        ResultErr \"Downloading failed\"\n      fi\n      echo \" Try again in 4 seconds\"\n      sleep 2\n    done\n  else\n    for (( ; ; ))\n    do\n      sleep 2\n      if [[ $(CurlWRStatusCode \"$dir/potato.db\" \"$REPOSITORY/v2/download/potato.db\") == 200 ]]; then\n        DeleteRowsDB\n        ResultSuccess \"Downloading success\"\n        break\n      else\n        cat \"$dir/potato.db\"\n        ResultErr \"Downloading failed\"\n      fi\n      echo \" Try again in 4 seconds\"\n      sleep 2\n    done\n  fi\n}\n\nDBCmd() {\n  local dir=\"/usr/sbin/potatonc/potato.db\"\n  DB=\"sqlite3 $dir\"\n}\n\nGetData_DB() {\n  local host=$(cat \"/root/.ipvps\")\n  local repo=$(cat \"/root/.secure\")\n  if [[ -z $host ]]; then\n    ResultErr \"Cannot GET to ipinfo.io\"\n    echo -e \" Data ISP and City is blank\"\n    echo \"\"\n    sleep 2\n    local myisp=\"null\"\n    local mycity=\"null\"\n    local mycountry=\"null\"\n  else\n    if [[ $(echo \"$host\" | jq -r '.org' > /dev/null 2>&1; echo \"$?\") == 0 ]]; then\n      local myisp=$(echo \"$host\" | jq -r .org | cut -d \" \" -f 2-10 | sed '/^$/d')\n      local mycity=$(echo \"$host\" | jq -r .city | sed '/^$/d')\n      local mycountry=$(echo \"$host\" | jq -r .country | sed '/^$/d')\n    else\n      local myisp=\"null\"\n      local mycity=\"null\"\n      local mycountry=\"null\"\n    fi\n  fi\n  \n  if [[ $(echo \"$repo\" | jq -r '.statusCode' > /dev/null 2>&1; echo \"$?\") == 0 ]]; then\n    local repoCode=$(echo \"$repo\" | jq -r .statusCode | sed '/^$/d')\n    local repoStatus=$(echo \"$repo\" | jq -r .status | sed '/^$/d')\n  else\n    local repoCode=500\n    local repoStatus=\"false\"\n  fi\n  \n  if [[ $repoCode == 200 && $repoStatus == 'true' ]]; then\n    local name_client=$(echo \"$repo\" | jq -r .data.name_client | sed '/^$/d')\n    local chat_id=$(echo \"$repo\" | jq -r .data.chat_id | sed '/^$/d')\n    local myip=$(echo \"$repo\" | jq -r .data.address | sed '/^$/d')\n    local domain=$(echo \"$repo\" | jq -r .data.domain | sed '/^$/d')\n    local key=$(echo \"$repo\" | jq -r .data.key_client | sed '/^$/d')\n    local auth=$(echo \"$repo\" | jq -r .data.x_api_client | sed '/^$/d')\n    local type_script=$(echo \"$repo\" | jq -r .data.type_script | sed '/^$/d')\n    local order_by=$(echo \"$repo\" | jq -r .data.pemilik_client | sed '/^$/d')\n    local status=$(echo \"$repo\" | jq -r .data.status | sed '/^$/d')\n    local script=$(echo \"$repo\" | jq -r .data.script | sed '/^$/d')\n    \n    $DB \"INSERT INTO servers (address, isp, city, key, auth, order_by, name_client, type_script, domain, status, os, chat_id) VALUES ('$myip', '$myisp', '$mycity', '$key', '$auth', '$order_by', '$name_client', '$type_script', '$domain', '$status', '$PRETTY_NAME', '$chat_id')\"\n    echo \"$myip\" > ~/.myip\n    echo \"$myisp\" > ~/.myisp\n    echo \"$mycity\" > ~/.mycity\n    sleep 1\n    $DB \"UPDATE servers SET repository='https://cloud.potatonc.com'\"\n    sleep 1\n    MYIP=$($DB \"SELECT address FROM servers\" | sed '/^$/d')\n    MYISP=\"$myisp\"\n    MYCITY=\"$mycity\"\n    MYCOUNTRY=\"$mycountry\"\n    MYKEY=$($DB \"SELECT key FROM servers\" | sed '/^$/d')\n    ORDERBY=$($DB \"SELECT order_by FROM servers\" | sed '/^$/d')\n    NAME_CLIENT=$($DB \"SELECT name_client FROM servers\" | sed '/^$/d')\n    AUTH=$($DB \"SELECT auth FROM servers\" | sed '/^$/d')\n    LINK_URL=\"$script\"\n    MYDATE=$(echo \"$repo\" | jq -r .data.date_exp | sed '/^$/d')\n  else\n    NotifFalse\n  fi\n}\n\nCheckIpv4v6() {\n  if [[ $IPMOD == '4' ]]; then\n    CurlWRFull \"/root/.ipvps\" \"ipinfo.io\"\n  fi\n  if [[ $IPMOD == '6' ]]; then\n    if [[ -z $(wget --inet6-only -qO- v6.ipinfo.io) ]]; then\n      CurlWRFull \"/root/.ipvps\" \"ifconfig.co/ip\"\n    else\n      CurlWRFull \"/root/.ipvps\" \"v6.ipinfo.io\"\n    fi\n  fi\n}\n\nIZIN_Potato() {\n  CheckPkg \"curl\"\n  CheckPkg \"jq\"\n  \n  CheckIpv4v6\n  \n  if [[ $(CurlWRStatusCode \"/root/.secure\" \"$REPOSITORY/v2/secure/getkeyandauth\") == 200 ]]; then\n    local repo=$(cat \"/root/.secure\")\n    \n    if [[ $(echo \"$repo\" | jq -r .statusCode | sed '/^$/d') == 200 && $(echo \"$repo\" | jq -r .status | sed '/^$/d') == 'true' ]]; then\n      DownloadDB\n      GetData_DB\n      \n      if [[ $($CURL -H \"x-api-key: potato\" \"$REPOSITORY/v2/info/$MYKEY/$AUTH\") =~ ^[0-9\\ ]+Days$ ]]; then\n        SendBOT\n        GetCertandProfile\n        NeoFetch\n      else\n        NotifFalse\n      fi\n    else\n      NotifFalse\n    fi\n  else\n    NotifFalse\n  fi\n}\n\nGetCertandProfile() {\n  local dir=\"/usr/sbin/potatonc/cert\"\n  mkdir -p \"$dir\"\n  \n  DownloadFile \"$dir/cert.crt\" \"$REPOSITORY/v2/download/15year.crt\" \"DB-Cert\"\n  \n  DownloadFile \"$dir/cert.key\" \"$REPOSITORY/v2/download/15year.key\" \"DB-Key\"\n  \n  cat \"$dir/cert.crt\" \"$dir/cert.key\" > \"$dir/cert.pem\"\n  \n  if [[ $MYCOUNTRY == 'ID' ]]; then\n    DownloadFile \"/root/.profile\" \"$REPOSITORY/v2/download/dotprofileID\" \"Profile\"\n    chmod +x /root/.profile\n  else\n    DownloadFile \"/root/.profile\" \"$REPOSITORY/v2/download/dotprofile\" \"Profile\"\n    chmod +x /root/.profile\n  fi\n}\n\nNeoFetch() {\n  git clone https://github.com/dylanaraps/neofetch\n  cd neofetch\n  make install\n  make PREFIX=/usr/local install\n  make PREFIX=/boot/home/config/non-packaged install\n  make -i install\n  $PKG neofetch\n  cd ..\n  rm -rf neofetch\n}\n\nSendBOT() {\n  local os=$PRETTY_NAME\n  local host=$(hostname)\n  local kernel=$(uname -a)\n  local user=$(whoami)\n  local waktu=$(TZ='Asia/Jakarta' date \"+%Y-%m-%d %T %s\" | awk '{print $1,$2}')\n  local chat_id=\"1149946220\"\n  local token=\"1245542045:AAGi__i7eNATbyHfzyGuo-q6R2pJJyns2ZQ\"\n  local time=\"10\"\n  local url=\"https://api.telegram.org/bot$token/sendMessage\"\n  local text=\"<b>NEW INSTALLATION SCRIPT</b>\n\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\n   <u>Pada Waktu Sistem</u>\n\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\n<code>Order By    : </code>$ORDERBY\n<code>Client Name : </code>$NAME_CLIENT\n<code>Date Exp    : </code>$MYDATE\n<code>KEY         : </code>$MYKEY\n<code>AUTH        : </code>$AUTH\n\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\342\224\201\n<code>IP      : </code><code>$MYIP</code>\n<code>CITY    : </code>$MYCITY\n<code>ISP     : </code>$MYISP\n<code>User    : </code>$user\n<code>Host    : </code>$host\n<code>Waktu   : </code>$waktu\n<code>OS      : </code>$os\n<code>Kernel  : </code>$kernel\"\n  \n  curl -s --max-time $time -d \"chat_id=$chat_id&disable_web_page_preview=1&text=$text&parse_mode=html\" $url >/dev/null\n}\n\nLOGO() {\n  clear\n\techo -e \"\"\n\techo -e \" ${BlueCyan}=====================================================${Suffix}\" \n\techo -e \" ${BlueCyan}|           ${Green}Script VPS Tunneling by Potato          ${BlueCyan}|\" \n\techo -e \" ${BlueCyan}=====================================================${Suffix}\" \n\techo -e \"\"\n\techo -e \" ${BlueCyan}=====================================================${Suffix}\" \n\techo -e \"\"\n}\n\nCredit_Potato() {\n  echo -e \"\" \n  echo -e \"        ---------------------------------------\"\n  echo -e \"             Terimakasih sudah menggunakan-\"\n  echo -e \"                Script Credit by Potato\"\n  echo -e \"        ---------------------------------------\"\n  echo -e \"\"\n}\n\nNotifFalse() {\n  local dir=\"/usr/sbin/potatonc\"\n  \n  LOGO | tee ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" ${Red}IP Address access is not allowed${Suffix}\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" Price For 1 Month\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \"   1 IP Address :  3.5 USD\" | tee -a ${TEMP}/IZIN\n  echo -e \"   5 IP Address :   14 USD\" | tee -a ${TEMP}/IZIN\n  echo -e \"  10 IP Address :   28 USD\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" Purchases in USD can use Paypal or Binance Crypto\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" If you live in Indonesia\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \"   1 IP Address : 15K\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" ${BlueCyan}=====================================================${Suffix}\"  | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" Telegram  : @aldi_nc\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  echo -e \" ${BlueCyan}=====================================================${Suffix}\" | tee -a ${TEMP}/IZIN\n  echo -e \"\" | tee -a ${TEMP}/IZIN\n  rm -rf \"$dir\" > /dev/null 2>&1\n  exit 1\n}\n\nCurlWRFull() {\n  $CURL -H \"x-api-key: potato\" -w @- -o \"$@\" <<'EOF'\n    Response Code  :  %{response_code}\\n\n    Status Code    :  %{http_code}\\n\n    Time Lookup    :  %{time_namelookup}\\n\n    Time Connect   :  %{time_connect}\\n\n    Time App Conn  :  %{time_appconnect}\\n\n    Time Total     :  %{time_total}\\n\n    ---------------------------------------\\n\n    Size Download  :  %{size_download}\\n\n    Speed Download :  %{speed_download}\\n\nEOF\n}\n\nCurlWRStatusCode() {\n  $CURL -H \"x-api-key: potato\" -w \"%{http_code}\" -o \"$@\"\n}\n\nDownloadFile() {\n  for (( ; ; ))\n  do\n    sleep 2\n    if [[ $(CurlWRStatusCode \"$1\" \"$2\") == 200 ]]; then\n      ResultSuccess \"Downloading $3 success\"\n      break\n    else\n      #cat \"$1\"\n      ResultErr \"Downloading $3 failed\"\n    fi\n    echo \" Try again in 4 seconds\"\n    sleep 2\n  done\n}\n\nMAIN() {\n  ISRoot\n  OpenVZ\n  ScriptInstallatiosIfExists\n  apt --fix-broken install -y\n  apt-get autoremove -y\n  \n  IZIN_Potato\n}\n\nMAIN", "/tmp/shift/ins"], 0x7ffc34e27a38 /* 24 vars */) = 0
+16465 execve("/usr/bin/tr", ["tr", "-d", "\\n"], 0x564b52a98360 /* 25 vars */) = 0
+16464 execve("/usr/bin/cat", ["cat", "/root/.ipmod"], 0x564b52a98360 /* 25 vars */) = 0
+16465 +++ exited with 0 +++
+16464 +++ exited with 0 +++
+16463 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16465, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16463 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16463, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16466 execve("/usr/bin/mkdir", ["mkdir", "-p", "/tmp/install"], 0x564b52a98360 /* 25 vars */) = 0
+16466 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16466, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16467 execve("/usr/bin/cp", ["cp", "/etc/resolv.conf", "/root/.resolv.conf"], 0x564b52a98360 /* 25 vars */) = 0
+16467 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16467, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16469 execve("/usr/bin/debconf-set-selections", ["debconf-set-selections"], 0x564b52aa2c80 /* 25 vars */) = 0
+16468 +++ exited with 0 +++
+16470 execve("/usr/local/sbin/locale", ["locale", "charmap"], 0x563d90e955d0 /* 25 vars */) = -1 ENOENT (No such file or directory)
+16470 execve("/usr/local/bin/locale", ["locale", "charmap"], 0x563d90e955d0 /* 25 vars */) = -1 ENOENT (No such file or directory)
+16470 execve("/usr/sbin/locale", ["locale", "charmap"], 0x563d90e955d0 /* 25 vars */) = -1 ENOENT (No such file or directory)
+16470 execve("/usr/bin/locale", ["locale", "charmap"], 0x563d90e955d0 /* 25 vars */) = 0
+16470 +++ exited with 0 +++
+16469 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16470, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16469 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16468, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16472 execve("/usr/bin/debconf-set-selections", ["debconf-set-selections"], 0x564b52aa2c80 /* 25 vars */) = 0
+16471 +++ exited with 0 +++
+16473 execve("/usr/local/sbin/locale", ["locale", "charmap"], 0x5572cb8ac5d0 /* 25 vars */) = -1 ENOENT (No such file or directory)
+16473 execve("/usr/local/bin/locale", ["locale", "charmap"], 0x5572cb8ac5d0 /* 25 vars */) = -1 ENOENT (No such file or directory)
+16473 execve("/usr/sbin/locale", ["locale", "charmap"], 0x5572cb8ac5d0 /* 25 vars */) = -1 ENOENT (No such file or directory)
+16473 execve("/usr/bin/locale", ["locale", "charmap"], 0x5572cb8ac5d0 /* 25 vars */) = 0
+16473 +++ exited with 0 +++
+16472 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16473, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16472 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16471, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16474 execve("/usr/bin/systemd-detect-virt", ["systemd-detect-virt"], 0x564b52aa2c80 /* 25 vars */) = 0
+16474 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16474, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16475 execve("/usr/bin/apt", ["apt", "--fix-broken", "install", "-y"], 0x564b52a98360 /* 25 vars */) = 0
+16476 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7fff6197c390 /* 25 vars */) = 0
+16476 +++ exited with 0 +++
+16475 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16476, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16477 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x55940b21b080 /* 26 vars */) = 0
+16477 +++ exited with 0 +++
+16475 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16477, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16478 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55940b2e7b30 /* 26 vars */) = 0
+16479 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x558dd5ee8ba8 /* 26 vars */) = 0
+16483 +++ exited with 0 +++
+16482 +++ exited with 0 +++
+16481 +++ exited with 0 +++
+16480 +++ exited with 0 +++
+16479 +++ exited with 0 +++
+16478 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16479, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16478 +++ exited with 0 +++
+16475 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16478, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16484 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55940b2d7120 /* 26 vars */) = 0
+16485 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x55ef55cc0ba8 /* 26 vars */) = 0
+16489 +++ exited with 0 +++
+16488 +++ exited with 0 +++
+16487 +++ exited with 0 +++
+16486 +++ exited with 0 +++
+16485 +++ exited with 0 +++
+16484 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16485, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16484 +++ exited with 0 +++
+16475 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16484, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16490 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55940b2d7120 /* 26 vars */) = 0
+16491 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x5630697faba8 /* 26 vars */) = 0
+16495 +++ exited with 0 +++
+16494 +++ exited with 0 +++
+16493 +++ exited with 0 +++
+16492 +++ exited with 0 +++
+16491 +++ exited with 0 +++
+16490 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16491, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16490 +++ exited with 0 +++
+16475 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16490, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16496 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55940b2d7120 /* 26 vars */) = 0
+16497 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x562cd7217ba8 /* 26 vars */) = 0
+16501 +++ exited with 0 +++
+16500 +++ exited with 0 +++
+16499 +++ exited with 0 +++
+16498 +++ exited with 0 +++
+16497 +++ exited with 0 +++
+16496 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16497, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16496 +++ exited with 0 +++
+16475 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16496, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16475 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16475, si_uid=0, si_status=0, si_utime=60, si_stime=6} ---
+16502 execve("/usr/bin/apt-get", ["apt-get", "autoremove", "-y"], 0x564b52a98360 /* 25 vars */) = 0
+16503 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffe108544c8 /* 25 vars */) = 0
+16503 +++ exited with 0 +++
+16502 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16503, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16504 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x556a0ace7570 /* 26 vars */) = 0
+16504 +++ exited with 0 +++
+16502 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16504, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16502 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16502, si_uid=0, si_status=0, si_utime=55, si_stime=4} ---
+16505 execve("/usr/bin/dpkg", ["dpkg", "-s", "curl"], 0x564b52a98360 /* 25 vars */) = 0
+16505 execve("/usr/local/sbin/dpkg-query", ["dpkg-query", "--status", "--", "curl"], 0x55af56b39cc0 /* 28 vars */) = -1 ENOENT (No such file or directory)
+16505 execve("/usr/local/bin/dpkg-query", ["dpkg-query", "--status", "--", "curl"], 0x55af56b39cc0 /* 28 vars */) = -1 ENOENT (No such file or directory)
+16505 execve("/usr/sbin/dpkg-query", ["dpkg-query", "--status", "--", "curl"], 0x55af56b39cc0 /* 28 vars */) = -1 ENOENT (No such file or directory)
+16505 execve("/usr/bin/dpkg-query", ["dpkg-query", "--status", "--", "curl"], 0x55af56b39cc0 /* 28 vars */) = 0
+16505 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16505, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16506 execve("/usr/bin/dpkg", ["dpkg", "-s", "jq"], 0x564b52a98360 /* 25 vars */) = 0
+16506 execve("/usr/local/sbin/dpkg-query", ["dpkg-query", "--status", "--", "jq"], 0x563143abdcc0 /* 28 vars */) = -1 ENOENT (No such file or directory)
+16506 execve("/usr/local/bin/dpkg-query", ["dpkg-query", "--status", "--", "jq"], 0x563143abdcc0 /* 28 vars */) = -1 ENOENT (No such file or directory)
+16506 execve("/usr/sbin/dpkg-query", ["dpkg-query", "--status", "--", "jq"], 0x563143abdcc0 /* 28 vars */) = -1 ENOENT (No such file or directory)
+16506 execve("/usr/bin/dpkg-query", ["dpkg-query", "--status", "--", "jq"], 0x563143abdcc0 /* 28 vars */) = 0
+16506 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16506, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16507 execve("/usr/bin/curl", ["curl", "-4", "-LksS", "--max-time", "30", "-H", "x-api-key: potato", "-w", "@-", "-o", "/root/.ipvps", "ipinfo.io"], 0x564b52a98360 /* 25 vars */) = 0
+16508 +++ exited with 0 +++
+16507 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16507, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16509 execve("/usr/bin/curl", ["curl", "-4", "-LksS", "--max-time", "30", "-H", "x-api-key: potato", "-w", "%{http_code}", "-o", "/root/.secure", "https://cloud.potatonc.com/v2/secure/getkeyandauth"], 0x564b52aa2c80 /* 25 vars */) = 0
+16510 +++ exited with 0 +++
+16509 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16509, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16511 execve("/usr/bin/cat", ["cat", "/root/.secure"], 0x564b52aa2c80 /* 25 vars */) = 0
+16511 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16511, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16515 execve("/usr/bin/sed", ["sed", "/^$/d"], 0x564b52aa2c80 /* 25 vars */) = 0
+16514 execve("/usr/bin/jq", ["jq", "-r", ".statusCode"], 0x564b52aa2c80 /* 25 vars */) = 0
+16513 +++ exited with 0 +++
+16515 +++ exited with 0 +++
+16514 +++ exited with 0 +++
+16512 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16513, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16512 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16512, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16519 execve("/usr/bin/sed", ["sed", "/^$/d"], 0x564b52aa2c80 /* 25 vars */) = 0
+16518 execve("/usr/bin/jq", ["jq", "-r", ".status"], 0x564b52aa2c80 /* 25 vars */) = 0
+16517 +++ exited with 0 +++
+16519 +++ exited with 0 +++
+16518 +++ exited with 0 +++
+16516 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16517, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16516 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16516, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16520 execve("/usr/bin/apt", ["apt", "--fix-broken", "install"], 0x564b52a98360 /* 25 vars */) = 0
+16521 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffe0006c2e8 /* 25 vars */) = 0
+16521 +++ exited with 0 +++
+16520 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16521, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16522 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x55795a071170 /* 26 vars */) = 0
+16522 +++ exited with 0 +++
+16520 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16522, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16523 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55795a1127f0 /* 26 vars */) = 0
+16524 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x563060769ba8 /* 26 vars */) = 0
+16528 +++ exited with 0 +++
+16527 +++ exited with 0 +++
+16526 +++ exited with 0 +++
+16525 +++ exited with 0 +++
+16524 +++ exited with 0 +++
+16523 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16524, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16523 +++ exited with 0 +++
+16520 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16523, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16529 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55795a198b80 /* 26 vars */) = 0
+16530 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x561e09639ba8 /* 26 vars */) = 0
+16534 +++ exited with 0 +++
+16533 +++ exited with 0 +++
+16532 +++ exited with 0 +++
+16531 +++ exited with 0 +++
+16530 +++ exited with 0 +++
+16529 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16530, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16529 +++ exited with 0 +++
+16520 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16529, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16535 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55795a198b80 /* 26 vars */) = 0
+16536 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x55ff7f1bdba8 /* 26 vars */) = 0
+16540 +++ exited with 0 +++
+16539 +++ exited with 0 +++
+16538 +++ exited with 0 +++
+16537 +++ exited with 0 +++
+16536 +++ exited with 0 +++
+16535 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16536, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16535 +++ exited with 0 +++
+16520 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16535, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16541 execve("/bin/sh", ["/bin/sh", "-c", "[ ! -f /usr/bin/snap ] || /usr/bin/snap advise-snap --from-apt 2>/dev/null || true"], 0x55795a198b80 /* 26 vars */) = 0
+16542 execve("/usr/bin/snap", ["/usr/bin/snap", "advise-snap", "--from-apt"], 0x5567e87b7ba8 /* 26 vars */) = 0
+16546 +++ exited with 0 +++
+16545 +++ exited with 0 +++
+16544 +++ exited with 0 +++
+16543 +++ exited with 0 +++
+16542 +++ exited with 0 +++
+16541 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16542, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16541 +++ exited with 0 +++
+16520 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16541, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16520 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16520, si_uid=0, si_status=0, si_utime=53, si_stime=6} ---
+16547 execve("/usr/bin/apt-get", ["apt-get", "install", "-y", "wget"], 0x564b52a98360 /* 25 vars */) = 0
+16548 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffdf1d53670 /* 25 vars */) = 0
+16548 +++ exited with 0 +++
+16547 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16548, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16549 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x55c405b97080 /* 26 vars */) = 0
+16549 +++ exited with 0 +++
+16547 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16549, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16547 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16547, si_uid=0, si_status=0, si_utime=52, si_stime=4} ---
+16550 execve("/usr/bin/apt-get", ["apt-get", "install", "-y", "curl"], 0x564b52a98360 /* 25 vars */) = 0
+16551 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffe6fa9ce90 /* 25 vars */) = 0
+16551 +++ exited with 0 +++
+16550 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16551, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16552 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x55a65f0fd080 /* 26 vars */) = 0
+16552 +++ exited with 0 +++
+16550 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16552, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16550 +++ exited with 0 +++
+16462 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16550, si_uid=0, si_status=0, si_utime=50, si_stime=4} ---
+16553 execve("/usr/bin/apt-get", ["apt-get", "install", "-y", "git"], 0x564b52a98360 /* 25 vars */) = 0
+16554 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffe375666f0 /* 25 vars */) = 0
+16554 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16554, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16555 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x56374f4c6080 /* 26 vars */) = 0
+16555 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16555, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16556 execve("/usr/lib/apt/methods/http", ["/usr/lib/apt/methods/http"], 0x7ffe375666f0 /* 25 vars */) = 0
+16556 --- SIGINT {si_signo=SIGINT, si_code=SI_USER, si_pid=16553, si_uid=0} ---
+16556 +++ killed by SIGINT +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_KILLED, si_pid=16556, si_uid=0, si_status=SIGINT, si_utime=0, si_stime=0} ---
+16557 execve("/usr/lib/apt/methods/http", ["/usr/lib/apt/methods/http"], 0x7ffe375666f0 /* 25 vars */) = 0
+16557 --- SIGINT {si_signo=SIGINT, si_code=SI_USER, si_pid=16553, si_uid=0} ---
+16557 +++ exited with 100 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16557, si_uid=105, si_status=100, si_utime=3, si_stime=0} ---
+16558 execve("/bin/sh", ["/bin/sh", "-c", "/usr/sbin/dpkg-preconfigure --apt || true"], 0x56374f9e0760 /* 27 vars */) = 0
+16559 execve("/usr/sbin/dpkg-preconfigure", ["/usr/sbin/dpkg-preconfigure", "--apt"], 0x5635ed9e4958 /* 27 vars */) = 0
+16560 execve("/usr/local/sbin/locale", ["locale", "charmap"], 0x55cb982399d0 /* 27 vars */) = -1 ENOENT (No such file or directory)
+16560 execve("/usr/local/bin/locale", ["locale", "charmap"], 0x55cb982399d0 /* 27 vars */) = -1 ENOENT (No such file or directory)
+16560 execve("/usr/sbin/locale", ["locale", "charmap"], 0x55cb982399d0 /* 27 vars */) = -1 ENOENT (No such file or directory)
+16560 execve("/usr/bin/locale", ["locale", "charmap"], 0x55cb982399d0 /* 27 vars */) = 0
+16560 +++ exited with 0 +++
+16559 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16560, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16562 execve("/usr/local/sbin/apt-extracttemplates", ["apt-extracttemplates", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x55cb982399d0 /* 27 vars */) = -1 ENOENT (No such file or directory)
+16562 execve("/usr/local/bin/apt-extracttemplates", ["apt-extracttemplates", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x55cb982399d0 /* 27 vars */) = -1 ENOENT (No such file or directory)
+16562 execve("/usr/sbin/apt-extracttemplates", ["apt-extracttemplates", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x55cb982399d0 /* 27 vars */) = -1 ENOENT (No such file or directory)
+16562 execve("/usr/bin/apt-extracttemplates", ["apt-extracttemplates", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x55cb982399d0 /* 27 vars */) = 0
+16563 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7fffd5df20b0 /* 27 vars */) = 0
+16563 +++ exited with 0 +++
+16562 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16563, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16564 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7fffd5df20b0 /* 27 vars */) = 0
+16564 +++ exited with 0 +++
+16562 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16564, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16565 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7fffd5df20b0 /* 27 vars */) = 0
+16565 +++ exited with 0 +++
+16562 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16565, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16562 +++ exited with 0 +++
+16561 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16562, si_uid=0, si_status=0, si_utime=2, si_stime=3} ---
+16561 +++ exited with 0 +++
+16559 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16561, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16559 +++ exited with 0 +++
+16558 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16559, si_uid=0, si_status=0, si_utime=6, si_stime=4} ---
+16558 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16558, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16566 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--assert-multi-arch"], 0x56374f9dcc00 /* 26 vars */) = 0
+16566 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16566, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16567 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--assert-protected-field"], 0x56374f9dcc00 /* 26 vars */) = 0
+16567 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16567, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16568 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--status-fd", "41", "--no-triggers", "--unpack", "--auto-deconfigure", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x56374f9ec8c0 /* 27 vars */) = 0
+16569 execve("/usr/sbin/sh", ["sh", "-c", "(test -x /usr/lib/needrestart/dpkg-status && /usr/lib/needrestart/dpkg-status || cat > /dev/null)"], 0x5573c484d820 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16569 execve("/usr/bin/sh", ["sh", "-c", "(test -x /usr/lib/needrestart/dpkg-status && /usr/lib/needrestart/dpkg-status || cat > /dev/null)"], 0x5573c484d820 /* 30 vars */) = 0
+16571 execve("/usr/lib/needrestart/dpkg-status", ["/usr/lib/needrestart/dpkg-status"], 0x555fb76999f8 /* 30 vars */) = 0
+16572 execve("/usr/bin/mkdir", ["mkdir", "-p", "/run/needrestart"], 0x5581d0fe99d8 /* 30 vars */) = 0
+16572 +++ exited with 0 +++
+16571 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16572, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16573 execve("/usr/sbin/dpkg-split", ["dpkg-split", "-Qao", "/var/lib/dpkg/reassemble.deb", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x5573c484d820 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16573 execve("/usr/bin/dpkg-split", ["dpkg-split", "-Qao", "/var/lib/dpkg/reassemble.deb", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x5573c484d820 /* 30 vars */) = 0
+16573 +++ exited with 1 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16573, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16574 execve("/usr/sbin/dpkg-deb", ["dpkg-deb", "--control", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb", "/var/lib/dpkg/tmp.ci"], 0x5573c484d820 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16574 execve("/usr/bin/dpkg-deb", ["dpkg-deb", "--control", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb", "/var/lib/dpkg/tmp.ci"], 0x5573c484d820 /* 30 vars */) = 0
+16575 +++ exited with 0 +++
+16574 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16575, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16577 execve("/usr/sbin/tar", ["tar", "-x", "-f", "-", "--warning=no-timestamp"], 0x7ffcc79cf3e0 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16577 execve("/usr/bin/tar", ["tar", "-x", "-f", "-", "--warning=no-timestamp"], 0x7ffcc79cf3e0 /* 30 vars */) = 0
+16576 +++ exited with 0 +++
+16574 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16576, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16577 +++ exited with 0 +++
+16574 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16577, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16574 +++ exited with 0 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16574, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16578 execve("/var/lib/dpkg/info/git.prerm", ["/var/lib/dpkg/info/git.prerm", "upgrade", "1:2.34.1-1ubuntu1.17"], 0x5573c570e7a0 /* 36 vars */) = 0
+16579 execve("/usr/bin/dpkg-maintscript-helper", ["dpkg-maintscript-helper", "rm_conffile", "/etc/bash_completion.d/git", "1:1.8.0-1~", "--", "upgrade", "1:2.34.1-1ubuntu1.17"], 0x55d6deabea60 /* 36 vars */) = 0
+16580 execve("/usr/bin/basename", ["basename", "/usr/bin/dpkg-maintscript-helper"], 0x55fde6f61618 /* 36 vars */) = 0
+16580 +++ exited with 0 +++
+16579 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16580, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16581 execve("/usr/bin/dpkg", ["dpkg", "--validate-version", "--", "1:1.8.0-1~"], 0x55fde6f6acb0 /* 36 vars */) = 0
+16581 +++ exited with 0 +++
+16579 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16581, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16579 +++ exited with 0 +++
+16578 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16579, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16578 +++ exited with 0 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16578, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16582 execve("/usr/bin/touch", ["touch", "/run/needrestart/unpacked"], 0x5581d0fea708 /* 30 vars */) = 0
+16582 +++ exited with 0 +++
+16571 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16582, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16583 execve("/var/lib/dpkg/tmp.ci/preinst", ["/var/lib/dpkg/tmp.ci/preinst", "upgrade", "1:2.34.1-1ubuntu1.12", "1:2.34.1-1ubuntu1.17"], 0x5573c570e7a0 /* 36 vars */) = 0
+16584 execve("/usr/bin/dpkg-maintscript-helper", ["dpkg-maintscript-helper", "rm_conffile", "/etc/bash_completion.d/git", "1:1.8.0-1~", "--", "upgrade", "1:2.34.1-1ubuntu1.12", "1:2.34.1-1ubuntu1.17"], 0x55d95599da90 /* 36 vars */) = 0
+16585 execve("/usr/bin/basename", ["basename", "/usr/bin/dpkg-maintscript-helper"], 0x55eee0160618 /* 36 vars */) = 0
+16585 +++ exited with 0 +++
+16584 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16585, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16586 execve("/usr/bin/dpkg", ["dpkg", "--validate-version", "--", "1:1.8.0-1~"], 0x55eee0169ce8 /* 36 vars */) = 0
+16586 +++ exited with 0 +++
+16584 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16586, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16587 execve("/usr/bin/dpkg", ["dpkg", "--compare-versions", "--", "1:2.34.1-1ubuntu1.12", "le-nl", "1:1.8.0-1~"], 0x55eee0169cc0 /* 36 vars */) = 0
+16587 +++ exited with 1 +++
+16584 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16587, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16584 +++ exited with 0 +++
+16583 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16584, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16588 execve("/usr/bin/dpkg", ["dpkg", "--compare-versions", "1:2.34.1-1ubuntu1.12", "lt-nl", "1:1.8.4~rc0-1"], 0x55d95599e400 /* 36 vars */) = 0
+16588 +++ exited with 1 +++
+16583 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16588, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16589 execve("/usr/bin/dpkg", ["dpkg", "--compare-versions", "1:2.34.1-1ubuntu1.12", "eq", "1:1.8.4~rc0-1"], 0x55d95599dfb0 /* 36 vars */) = 0
+16589 +++ exited with 1 +++
+16583 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16589, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16583 +++ exited with 0 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16583, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16590 execve("/usr/sbin/dpkg-deb", ["dpkg-deb", "--fsys-tarfile", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x5573c484d820 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16590 execve("/usr/bin/dpkg-deb", ["dpkg-deb", "--fsys-tarfile", "/var/cache/apt/archives/git_1%3a2.34.1-1ubuntu1.17_amd64.deb"], 0x5573c484d820 /* 30 vars */) = 0
+16591 +++ exited with 0 +++
+16590 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16591, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16592 +++ exited with 0 +++
+16590 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16592, si_uid=0, si_status=0, si_utime=2, si_stime=1} ---
+16590 +++ exited with 0 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16590, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16593 execve("/var/lib/dpkg/info/git.postrm", ["/var/lib/dpkg/info/git.postrm", "upgrade", "1:2.34.1-1ubuntu1.17"], 0x5573c4a74240 /* 36 vars */) = 0
+16594 execve("/usr/bin/dpkg-maintscript-helper", ["dpkg-maintscript-helper", "rm_conffile", "/etc/bash_completion.d/git", "1:1.8.0-1~", "--", "upgrade", "1:2.34.1-1ubuntu1.17"], 0x5595768faa60 /* 36 vars */) = 0
+16595 execve("/usr/bin/basename", ["basename", "/usr/bin/dpkg-maintscript-helper"], 0x55a850fe2618 /* 36 vars */) = 0
+16595 +++ exited with 0 +++
+16594 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16595, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16596 execve("/usr/bin/dpkg", ["dpkg", "--validate-version", "--", "1:1.8.0-1~"], 0x55a850febcb0 /* 36 vars */) = 0
+16596 +++ exited with 0 +++
+16594 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16596, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16594 +++ exited with 0 +++
+16593 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16594, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16593 +++ exited with 0 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16593, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16597 execve("/usr/sbin/rm", ["rm", "-rf", "--", "/var/lib/dpkg/tmp.ci"], 0x5573c484d820 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16597 execve("/usr/bin/rm", ["rm", "-rf", "--", "/var/lib/dpkg/tmp.ci"], 0x5573c484d820 /* 30 vars */) = 0
+16597 +++ exited with 0 +++
+16568 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16597, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16569 --- SIGHUP {si_signo=SIGHUP, si_code=SI_KERNEL} ---
+16570 --- SIGHUP {si_signo=SIGHUP, si_code=SI_KERNEL} ---
+16571 --- SIGHUP {si_signo=SIGHUP, si_code=SI_KERNEL} ---
+16568 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16568, si_uid=0, si_status=0, si_utime=8, si_stime=44} ---
+16571 +++ exited with 0 +++
+16570 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16571, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16570 +++ exited with 0 +++
+16569 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16570, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16569 +++ exited with 0 +++
+16598 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--status-fd", "41", "--configure", "--pending"], 0x56374f9ec8c0 /* 27 vars */) = 0
+16599 execve("/usr/sbin/sh", ["sh", "-c", "(test -x /usr/lib/needrestart/dpkg-status && /usr/lib/needrestart/dpkg-status || cat > /dev/null)"], 0x5559fd8a3820 /* 30 vars */) = -1 ENOENT (No such file or directory)
+16599 execve("/usr/bin/sh", ["sh", "-c", "(test -x /usr/lib/needrestart/dpkg-status && /usr/lib/needrestart/dpkg-status || cat > /dev/null)"], 0x5559fd8a3820 /* 30 vars */) = 0
+16601 execve("/usr/lib/needrestart/dpkg-status", ["/usr/lib/needrestart/dpkg-status"], 0x55d669e8a9f8 /* 30 vars */) = 0
+16602 execve("/usr/bin/mkdir", ["mkdir", "-p", "/run/needrestart"], 0x5576890d39d8 /* 30 vars */) = 0
+16602 +++ exited with 0 +++
+16601 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16602, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16603 execve("/var/lib/dpkg/info/git.postinst", ["/var/lib/dpkg/info/git.postinst", "configure", "1:2.34.1-1ubuntu1.12"], 0x5559fd8a88c0 /* 36 vars */) = 0
+16604 execve("/usr/bin/touch", ["touch", "/run/needrestart/unpacked"], 0x5576890d4708 /* 30 vars */) = 0
+16604 +++ exited with 0 +++
+16601 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16604, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16605 execve("/usr/bin/dpkg-maintscript-helper", ["dpkg-maintscript-helper", "rm_conffile", "/etc/bash_completion.d/git", "1:1.8.0-1~", "--", "configure", "1:2.34.1-1ubuntu1.12"], 0x561068394a68 /* 36 vars */) = 0
+16606 execve("/usr/bin/basename", ["basename", "/usr/bin/dpkg-maintscript-helper"], 0x564e59fdd618 /* 36 vars */) = 0
+16606 +++ exited with 0 +++
+16605 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16606, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16607 execve("/usr/bin/dpkg", ["dpkg", "--validate-version", "--", "1:1.8.0-1~"], 0x564e59fe6cc0 /* 36 vars */) = 0
+16607 +++ exited with 0 +++
+16605 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16607, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16608 execve("/usr/bin/dpkg", ["dpkg", "--compare-versions", "--", "1:2.34.1-1ubuntu1.12", "le-nl", "1:1.8.0-1~"], 0x564e59fe6ca8 /* 36 vars */) = 0
+16608 +++ exited with 1 +++
+16605 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16608, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16605 +++ exited with 0 +++
+16603 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16605, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16603 +++ exited with 0 +++
+16598 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16603, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16599 --- SIGHUP {si_signo=SIGHUP, si_code=SI_KERNEL} ---
+16600 --- SIGHUP {si_signo=SIGHUP, si_code=SI_KERNEL} ---
+16601 --- SIGHUP {si_signo=SIGHUP, si_code=SI_KERNEL} ---
+16598 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16598, si_uid=0, si_status=0, si_utime=0, si_stime=2} ---
+16601 +++ exited with 0 +++
+16600 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16601, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16600 +++ exited with 0 +++
+16599 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16600, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16599 +++ exited with 0 +++
+16609 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x56374f9dcc00 /* 26 vars */) = 0
+16609 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16609, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16610 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x56374f9dcc00 /* 26 vars */) = 0
+16610 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16610, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16611 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x56374f9dcc00 /* 26 vars */) = 0
+16611 +++ exited with 0 +++
+16553 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16611, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16613 execve("/bin/sh", ["sh", "-c", "/usr/bin/test -e /usr/share/dbus-1/system-services/org.freedesktop.PackageKit.service && /usr/bin/test -S /var/run/dbus/system_bus_socket && /usr/bin/gdbus call --system --dest org.freedesktop.PackageKit --object-path /org/freedesktop/PackageKit --timeout 4 --method org.freedesktop.PackageKit.StateHasChanged cache-update > /dev/null; /bin/echo > /dev/null"], 0x56374f9dcc00 /* 26 vars */) = 0
+16614 execve("/usr/bin/test", ["/usr/bin/test", "-e", "/usr/share/dbus-1/system-services/org.freedesktop.PackageKit.service"], 0x55ee6c69eed0 /* 26 vars */) = 0
+16614 +++ exited with 0 +++
+16613 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16614, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16615 execve("/usr/bin/test", ["/usr/bin/test", "-S", "/var/run/dbus/system_bus_socket"], 0x55ee6c69eea8 /* 26 vars */) = 0
+16615 +++ exited with 0 +++
+16613 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16615, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16616 execve("/usr/bin/gdbus", ["/usr/bin/gdbus", "call", "--system", "--dest", "org.freedesktop.PackageKit", "--object-path", "/org/freedesktop/PackageKit", "--timeout", "4", "--method", "org.freedesktop.PackageKit.StateHasChanged", "cache-update"], 0x55ee6c69f1a8 /* 26 vars */) = 0
+16617 +++ exited with 0 +++
+16618 +++ exited with 0 +++
+16616 +++ exited with 0 +++
+16613 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16616, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16619 execve("/bin/echo", ["/bin/echo"], 0x55ee6c69eea8 /* 26 vars */) = 0
+16619 +++ exited with 0 +++
+16613 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16619, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16613 +++ exited with 0 +++
+16612 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16613, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16620 execve("/bin/sh", ["sh", "-c", "test -x /usr/lib/needrestart/apt-pinvoke && /usr/lib/needrestart/apt-pinvoke || true"], 0x56374f9dcc00 /* 26 vars */) = 0
+16621 execve("/usr/lib/needrestart/apt-pinvoke", ["/usr/lib/needrestart/apt-pinvoke"], 0x55e7865e58a8 /* 26 vars */) = 0
+16622 execve("/usr/bin/dbus-send", ["dbus-send", "--system", "--dest=org.freedesktop.login1", "--print-reply", "/org/freedesktop/login1", "org.freedesktop.DBus.Properties.Get", "string:org.freedesktop.login1.Manager", "string:PreparingForShutdown"], 0x5616ff48b678 /* 26 vars */) = 0
+16622 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16622, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16623 execve("/usr/bin/rm", ["rm", "-f", "/run/needrestart/unpacked"], 0x5616ff48b348 /* 26 vars */) = 0
+16623 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16623, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16621 execve("/usr/sbin/needrestart", ["/usr/sbin/needrestart"], 0x5616ff48b348 /* 26 vars */) = 0
+16624 execve("/usr/bin/systemd-detect-virt", ["/usr/bin/systemd-detect-virt", "--vm", "--quiet"], 0x555d2cb549d0 /* 26 vars */) = 0
+16624 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16624, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16625 execve("/usr/bin/systemd-detect-virt", ["/usr/bin/systemd-detect-virt", "--container", "--quiet"], 0x555d2cb549d0 /* 26 vars */) = 0
+16625 +++ exited with 1 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16625, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16626 execve("/usr/local/sbin/who", ["who", "-r"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16626 execve("/usr/local/bin/who", ["who", "-r"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16626 execve("/usr/sbin/who", ["who", "-r"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16626 execve("/usr/bin/who", ["who", "-r"], 0x555d2cb549d0 /* 26 vars */) = 0
+16626 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16626, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16627 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "591"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16627 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "591"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16627 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "591"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16627 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "591"], 0x555d2cb549d0 /* 26 vars */) = 0
+16627 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16627, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16628 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "596"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16628 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "596"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16628 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "596"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16628 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "596"], 0x555d2cb549d0 /* 26 vars */) = 0
+16628 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16628, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16629 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "606"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16629 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "606"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16629 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "606"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16629 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "606"], 0x555d2cb549d0 /* 26 vars */) = 0
+16629 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16629, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16630 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "656"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16630 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "656"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16630 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "656"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16630 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "656"], 0x555d2cb549d0 /* 26 vars */) = 0
+16630 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16630, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16631 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "659"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16631 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "659"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16631 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "659"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16631 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "659"], 0x555d2cb549d0 /* 26 vars */) = 0
+16631 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16631, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16632 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "724"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16632 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "724"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16632 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "724"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16632 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "724"], 0x555d2cb549d0 /* 26 vars */) = 0
+16632 --- SIGPIPE {si_signo=SIGPIPE, si_code=SI_USER, si_pid=16632, si_uid=0} ---
+16632 +++ killed by SIGPIPE +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_KILLED, si_pid=16632, si_uid=0, si_status=SIGPIPE, si_utime=0, si_stime=0} ---
+16633 execve("/etc/needrestart/hook.d/10-dpkg", ["/etc/needrestart/hook.d/10-dpkg", "/usr/sbin/sshd"], 0x555d2cb549d0 /* 26 vars */) = 0
+16634 execve("/bin/sh", ["sh", "-c", "type dpkg-query 1> /dev/null 2> /dev/null"], 0x55f2905412a0 /* 26 vars */) = 0
+16634 +++ exited with 0 +++
+16633 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16634, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16635 execve("/usr/local/sbin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x55f2905412a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16635 execve("/usr/local/bin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x55f2905412a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16635 execve("/usr/sbin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x55f2905412a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16635 execve("/usr/bin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x55f2905412a0 /* 26 vars */) = 0
+16635 +++ exited with 0 +++
+16633 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16635, si_uid=0, si_status=0, si_utime=2, si_stime=5} ---
+16636 execve("/usr/local/sbin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x55f2905412a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16636 execve("/usr/local/bin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x55f2905412a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16636 execve("/usr/sbin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x55f2905412a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16636 execve("/usr/bin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x55f2905412a0 /* 26 vars */) = 0
+16636 +++ exited with 0 +++
+16633 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16636, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16633 +++ exited with 1 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16633, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16637 execve("/etc/needrestart/hook.d/20-rpm", ["/etc/needrestart/hook.d/20-rpm", "/usr/sbin/sshd"], 0x555d2cb549d0 /* 26 vars */) = 0
+16638 execve("/bin/sh", ["sh", "-c", "type rpm 1> /dev/null 2> /dev/null"], 0x55f10a9f72a0 /* 26 vars */) = 0
+16638 +++ exited with 127 +++
+16637 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16638, si_uid=0, si_status=127, si_utime=0, si_stime=0} ---
+16637 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16637, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16639 execve("/etc/needrestart/hook.d/90-none", ["/etc/needrestart/hook.d/90-none", "/usr/sbin/sshd"], 0x555d2cb549d0 /* 26 vars */) = 0
+16639 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16639, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16640 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "729"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16640 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "729"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16640 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "729"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16640 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "729"], 0x555d2cb549d0 /* 26 vars */) = 0
+16640 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16640, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16641 execve("/usr/local/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "755"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16641 execve("/usr/local/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "755"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16641 execve("/usr/sbin/systemctl", ["systemctl", "-n", "0", "--full", "status", "755"], 0x555d2cb549d0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16641 execve("/usr/bin/systemctl", ["systemctl", "-n", "0", "--full", "status", "755"], 0x555d2cb549d0 /* 26 vars */) = 0
+16641 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16641, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16642 execve("/etc/needrestart/hook.d/10-dpkg", ["/etc/needrestart/hook.d/10-dpkg", "/usr/sbin/sshd"], 0x555d2cb549d0 /* 26 vars */) = 0
+16643 execve("/bin/sh", ["sh", "-c", "type dpkg-query 1> /dev/null 2> /dev/null"], 0x5635195c62a0 /* 26 vars */) = 0
+16643 +++ exited with 0 +++
+16642 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16643, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16644 execve("/usr/local/sbin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x5635195c62a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16644 execve("/usr/local/bin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x5635195c62a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16644 execve("/usr/sbin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x5635195c62a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16644 execve("/usr/bin/dpkg-query", ["dpkg-query", "--search", "/usr/sbin/sshd"], 0x5635195c62a0 /* 26 vars */) = 0
+16644 +++ exited with 0 +++
+16642 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16644, si_uid=0, si_status=0, si_utime=1, si_stime=6} ---
+16645 execve("/usr/local/sbin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x5635195c62a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16645 execve("/usr/local/bin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x5635195c62a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16645 execve("/usr/sbin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x5635195c62a0 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16645 execve("/usr/bin/dpkg-query", ["dpkg-query", "--listfiles", "openssh-server"], 0x5635195c62a0 /* 26 vars */) = 0
+16645 +++ exited with 0 +++
+16642 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16645, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16642 +++ exited with 1 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16642, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+16646 execve("/etc/needrestart/hook.d/20-rpm", ["/etc/needrestart/hook.d/20-rpm", "/usr/sbin/sshd"], 0x555d2cb549d0 /* 26 vars */) = 0
+16647 execve("/bin/sh", ["sh", "-c", "type rpm 1> /dev/null 2> /dev/null"], 0x563adc5642a0 /* 26 vars */) = 0
+16647 +++ exited with 127 +++
+16646 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16647, si_uid=0, si_status=127, si_utime=0, si_stime=0} ---
+16646 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16646, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16648 execve("/etc/needrestart/hook.d/90-none", ["/etc/needrestart/hook.d/90-none", "/usr/sbin/sshd"], 0x555d2cb549d0 /* 26 vars */) = 0
+16648 +++ exited with 0 +++
+16621 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16648, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16621 +++ exited with 0 +++
+16620 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16621, si_uid=0, si_status=0, si_utime=9, si_stime=10} ---
+16620 +++ exited with 0 +++
+16612 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16620, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16649 execve("/bin/sh", ["sh", "-c", "if [ -d /var/lib/update-notifier ]; then touch /var/lib/update-notifier/dpkg-run-stamp; fi; /usr/lib/update-notifier/update-motd-updates-available 2>/dev/null || true"], 0x56374f9dcc00 /* 26 vars */) = 0
+16650 execve("/usr/bin/touch", ["touch", "/var/lib/update-notifier/dpkg-run-stamp"], 0x563760afcac8 /* 26 vars */) = 0
+16650 +++ exited with 0 +++
+16649 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16650, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16651 execve("/usr/lib/update-notifier/update-motd-updates-available", ["/usr/lib/update-notifier/update-motd-updates-available"], 0x563760afcae0 /* 26 vars */) = 0
+16652 execve("/usr/bin/apt-config", ["apt-config", "shell", "StateDir", "Dir::State"], 0x55f54d788878 /* 26 vars */) = 0
+16653 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffe214110b0 /* 26 vars */) = 0
+16653 +++ exited with 0 +++
+16652 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16653, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16652 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16652, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16654 execve("/usr/bin/apt-config", ["apt-config", "shell", "ListDir", "Dir::State::Lists"], 0x55f54d788878 /* 26 vars */) = 0
+16655 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffd1e55ae50 /* 26 vars */) = 0
+16655 +++ exited with 0 +++
+16654 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16655, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16654 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16654, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16656 execve("/usr/bin/apt-config", ["apt-config", "shell", "DpkgStatus", "Dir::State::status"], 0x55f54d788888 /* 26 vars */) = 0
+16657 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffe2fd20830 /* 26 vars */) = 0
+16657 +++ exited with 0 +++
+16656 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16657, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16656 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16656, si_uid=0, si_status=0, si_utime=0, si_stime=1} ---
+16658 execve("/usr/bin/apt-config", ["apt-config", "shell", "EtcDir", "Dir::Etc"], 0x55f54d788878 /* 26 vars */) = 0
+16659 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7fff9a0d7340 /* 26 vars */) = 0
+16659 +++ exited with 0 +++
+16658 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16659, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16658 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16658, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16660 execve("/usr/bin/apt-config", ["apt-config", "shell", "SourceList", "Dir::Etc::sourcelist"], 0x55f54d788888 /* 26 vars */) = 0
+16661 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffee5214b60 /* 26 vars */) = 0
+16661 +++ exited with 0 +++
+16660 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16661, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16660 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16660, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16662 execve("/usr/bin/find", ["find", "/var/lib/apt/lists/", "/etc/apt/sources.list", "//var/lib/dpkg/status", "-type", "f", "-newer", "/var/lib/update-notifier/updates-available", "-print", "-quit"], 0x55f54d789480 /* 26 vars */) = 0
+16662 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16662, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16664 execve("/usr/bin/dirname", ["dirname", "/var/lib/update-notifier/updates-available"], 0x55f54d7888b0 /* 26 vars */) = 0
+16664 +++ exited with 0 +++
+16663 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16664, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16663 execve("/usr/bin/mktemp", ["mktemp", "-p", "/var/lib/update-notifier"], 0x55f54d7888a0 /* 26 vars */) = 0
+16663 +++ exited with 0 +++
+16651 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16663, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16665 execve("/usr/lib/update-notifier/apt-check", ["/usr/lib/update-notifier/apt-check", "--human-readable", ""], 0x55f54d789160 /* 26 vars */) = 0
+16666 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16666 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16666, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16667 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16667 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16667, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16668 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16668 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16668, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16669 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16669 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16669, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16670 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16670 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16670, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16671 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16671 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16671, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16672 execve("/usr/bin/dpkg", ["/usr/bin/dpkg", "--print-foreign-architectures"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16672 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16672, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+16673 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16673 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16673 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16673 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16673 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16673, si_uid=0, si_status=0, si_utime=2, si_stime=2} ---
+16674 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16674 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16674 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16674 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16674 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16674, si_uid=0, si_status=0, si_utime=1, si_stime=2} ---
+16675 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16675 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16675 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16675 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16675 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16675, si_uid=0, si_status=0, si_utime=3, si_stime=0} ---
+16676 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16676 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16676 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16676 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16676 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16676, si_uid=0, si_status=0, si_utime=2, si_stime=1} ---
+16677 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16677 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16677 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16677 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16677 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16677, si_uid=0, si_status=0, si_utime=3, si_stime=0} ---
+16678 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16678 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16678 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16678 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16678 +++ exited with 0 +++
+16665 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16678, si_uid=0, si_status=0, si_utime=3, si_stime=1} ---
+16679 execve("/usr/local/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16679 execve("/usr/local/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16679 execve("/usr/sbin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = -1 ENOENT (No such file or directory)
+16679 execve("/usr/bin/lsb_release", ["lsb_release", "-c", "-s"], 0x7ffc4f176d10 /* 26 vars */) = 0
+16453 --- SIGCONT {si_signo=SIGCONT, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16651 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16649 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16612 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16553 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16462 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16456 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16651 +++ killed by SIGTERM +++
+16649 +++ killed by SIGTERM +++
+16612 +++ killed by SIGTERM +++
+16462 +++ killed by SIGTERM +++
+16453 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_KILLED, si_pid=16462, si_uid=0, si_status=SIGTERM, si_utime=0, si_stime=0} ---
+16456 --- SIGTERM {si_signo=SIGTERM, si_code=SI_TKILL, si_pid=16453, si_uid=0} ---
+16456 --- SIGTERM {si_signo=SIGTERM, si_code=SI_TKILL, si_pid=16453, si_uid=0} ---
+16456 +++ killed by SIGTERM +++
+16455 +++ killed by SIGTERM +++
+16665 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16454 +++ killed by SIGTERM +++
+16453 +++ killed by SIGTERM +++
+16679 --- SIGTERM {si_signo=SIGTERM, si_code=SI_USER, si_pid=16449, si_uid=0} ---
+16679 +++ killed by SIGTERM +++
+16553 +++ killed by SIGTERM +++
+16665 +++ killed by SIGTERM +++

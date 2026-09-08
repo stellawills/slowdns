@@ -1,0 +1,25 @@
+#!/bin/bash
+
+clear
+
+echo -e "────────────────────────────"
+echo -e "      Menu V2ray Vless      "
+echo -e "────────────────────────────"
+echo -e "1. Create Vless Account "
+echo -e "2. Cek    Vless Login "
+echo -e "3. Delete Vless Account "
+echo -e "4. Renew  Vless Account "
+echo -e "5. Trafik Vless Account "
+echo -e "────────────────────────────"
+echo -e "0. Back To Main Menu "
+echo -e "────────────────────────────"
+read -p "Input Options: " opw
+case $opw in
+1) add-vless ;;
+2) cek-vless ;;
+3) del-vless ;;
+4) renew-vless ;;
+5) trafik-vless ;;
+0) menu ;;
+*) menu-vless ;;
+esac

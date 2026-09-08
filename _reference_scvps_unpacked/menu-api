@@ -1,0 +1,136 @@
+#!/bin/bash
+menu-api() {
+clear
+generate() {
+clear
+echo -e "Generating New Key"
+sleep 5
+clear
+v2ray uuid >> /etc/api/key
+clear
+systemctl daemon-reload
+systemctl enable server
+systemctl start server
+systemctl restart server
+mds=$(cat /etc/api/key)
+clear
+echo -e "
+Success Generate New Key
+========================
+Your API Token:
+$mds
+========================
+"
+}
+
+manual() {
+clear
+echo -e "
+Add New Token API
+=================
+"
+read -p "Input Token: " token
+sleep 5
+echo $token >> /etc/api/key
+systemctl daemon-reload
+systemctl enable server
+systemctl start server
+systemctl restart server
+clear
+mds=$(cat /etc/api/key)
+clear
+echo -e "
+Success Add New Key API
+========================
+Your API Token:
+$mds
+========================
+"
+}
+
+manual31() {
+nano /etc/api/key
+}
+
+enable() {
+clear
+echo -e "Enable API"
+sleep 5
+clear
+systemctl daemon-reload
+systemctl enable server
+systemctl start server
+systemctl restart server
+clear
+echo -e "Done Enable API"
+}
+
+restart() {
+echo -e "Restarting API"
+systemctl daemon-reload
+systemctl enable server
+systemctl start server
+systemctl restart server
+clear
+echo -e "Done Restarting API"
+}
+
+disable() {
+echo -e "Disable API"
+sleep 5
+clear
+systemctl stop server
+systemctl disable server
+clear
+echo -e "Success Disable API"
+}
+
+detail() {
+mkdir -p /etc/api
+domain=$(cat /usr/local/etc/v2ray/domain)
+edust_service=$(systemctl status server | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
+if [[ $edust_service == "running" ]]; then
+proxy1="\e[1;32m[ ON ]\033[0m"
+else
+proxy1="\e[1;31m[ OFF ]\033[0m"
+fi
+clear
+echo -e "
+<= Menu Web API =>
+==================
+With Port:
+- http://${domain}:9000/path
+==================
+Default Port:
+- http://${domain}/api/path
+- https://${domain}/api/path
+==================
+Status: $proxy1
+
+1. Generate New Key Token
+2. Change Manual Key Token
+3. Add Key Token API
+4. Enable API
+5. Restart API
+6. Disable API
+0. Back To Default Menu
+==================
+"
+read -p "Input Option: " opw
+case $opw in
+1) clear ; generate ; exit ;;
+2) clear ; manual31 ; exit ;;
+3) clear ; manual ; exit ;;
+4) clear ; enable ; exit ;;
+5) clear ; restart ; exit ;;
+6) clear ; disable ; exit ;;
+0) clear ; menu ; exit ;;
+*) clear ; detail ; exit ;;
+esac
+}
+
+detail
+
+}
+
+menu-api

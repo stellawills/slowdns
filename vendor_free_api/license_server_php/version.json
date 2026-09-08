@@ -1,0 +1,6 @@
+{
+  "version": "2026.09.06.1",
+  "notes": "Adds automatic device credential renewal plus transactional menu activation for managed SSH, OpenVPN, and isolated mutual-TLS Xray.",
+  "url": "https://license.internetshub.com/iptunnel-install.sh",
+  "sha256": "15b74e6673e41a21a2792703d45abe5145a9a51c5fc485dbf9eaa0ba80228989"
+}

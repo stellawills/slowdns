@@ -1,0 +1,9 @@
+[Unit]
+Description=IPTunnel maintenance and server health refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=REPLACE_ME_APP_DIR
+ExecStart=/usr/bin/php REPLACE_ME_APP_DIR/maintenance_slowdns.php --health-limit=25 --health-interval=300
