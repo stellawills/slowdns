@@ -8,6 +8,7 @@ SERVICES=(
   "slowdns-api.service|API"
   "slowdns-dnstt.service|SlowDNS Tunnel"
   "slowdns-udp53-redirect.service|UDP 53 Redirect"
+  "slowdns-healthcheck.timer|Runtime Health Timer"
   "slowdns-expire-sync.timer|Expiry Sync Timer"
 )
 
@@ -59,25 +60,25 @@ show_status() {
 
 restart_all() {
   systemctl restart slowdns-api.service slowdns-dnstt.service slowdns-udp53-redirect.service
-  systemctl restart slowdns-expire-sync.timer >/dev/null 2>&1 || true
+  systemctl restart slowdns-expire-sync.timer slowdns-healthcheck.timer >/dev/null 2>&1 || true
   echo "  Services restarted."
 }
 
 start_all() {
   systemctl start slowdns-api.service slowdns-dnstt.service slowdns-udp53-redirect.service
-  systemctl start slowdns-expire-sync.timer >/dev/null 2>&1 || true
+  systemctl start slowdns-expire-sync.timer slowdns-healthcheck.timer >/dev/null 2>&1 || true
   echo "  Services started."
 }
 
 stop_all() {
   systemctl stop slowdns-dnstt.service slowdns-api.service slowdns-udp53-redirect.service
-  systemctl stop slowdns-expire-sync.timer >/dev/null 2>&1 || true
+  systemctl stop slowdns-expire-sync.timer slowdns-healthcheck.timer >/dev/null 2>&1 || true
   echo "  Services stopped."
 }
 
 show_logs() {
   if command -v journalctl >/dev/null 2>&1; then
-    journalctl -u slowdns-api.service -u slowdns-dnstt.service -u slowdns-udp53-redirect.service --no-pager -n 80
+    journalctl -u slowdns-api.service -u slowdns-dnstt.service -u slowdns-udp53-redirect.service -u slowdns-healthcheck.service --no-pager -n 80
     return 0
   fi
 

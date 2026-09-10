@@ -61,6 +61,7 @@ Notes:
 - Installer automatically uses the public hostname as the NS target host unless `SLOWDNS_NS_HOST` is explicitly set.
 - On SSH sessions with `screen` available, the installer re-launches itself in `screen -S slowdns-install` so it can survive a dropped connection.
 - Installer now fails fast if the API or dnstt service does not come up cleanly.
+- A systemd health timer runs every two minutes, restores a failed dnstt/API service or missing UDP-53 redirect rules, and dnstt is recycled once daily to recover from a still-running but wedged process. This restarts SlowDNS only; it never reboots the VPS.
 - Installer bootstraps an isolated modern Go toolchain under `/opt/slowdns/toolchain/` when the VPS has an outdated system Go.
 - When the daemon must bind an internal high port like `5300`, the installer can still expose standard UDP `53` externally via an automatic redirect service.
 - Default API bind is `127.0.0.1`; change it in config if you intentionally want remote access.
@@ -116,6 +117,12 @@ Advanced override:
 - `SLOWDNS_NS_HOST` is still supported if you intentionally want the NS target host to differ from the public hostname.
 
 Service control after install:
+
+In `slowdns-menu`, choose **13 Auto-reboot** to view the schedule, enable or change
+a daily full VPS reboot, or disable it. Times use the server's local timezone.
+Auto-reboot is disabled by default and requires confirmation because it disconnects
+all users. The `slowdns-autoreboot.timer` systemd timer persists across boots;
+missed reboot times are not replayed when the server starts.
 
 ```bash
 /opt/slowdns/scripts/control.sh start

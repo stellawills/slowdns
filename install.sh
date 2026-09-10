@@ -5,7 +5,7 @@ BOOTSTRAP_REPO_URL="https://github.com/stellawills/slowdns.git"
 BOOTSTRAP_REF="main"
 BOOTSTRAP_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/stellawills/slowdns/${BOOTSTRAP_REF}/scripts/install.sh"
 BOOTSTRAP_ARCHIVE_URL="https://codeload.github.com/stellawills/slowdns/tar.gz/refs/heads/${BOOTSTRAP_REF}"
-BOOTSTRAP_INSTALL_SCRIPT_SHA256="b638f08b1aa8fb3ebd4304a5729bf05098b73c4e976dd5c357cd1d82f4a6d383"
+BOOTSTRAP_INSTALL_SCRIPT_SHA256="dc487b50929fc32552970c0da73c69023cb4b6e2e03877ea601adc02584caba4"
 BOOTSTRAP_TMPDIR=""
 
 cleanup_bootstrap() {

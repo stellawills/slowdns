@@ -594,6 +594,131 @@ change_mtu() {
   fi
 }
 
+autoreboot_status() {
+  local enabled active next
+  enabled="$(systemctl is-enabled slowdns-autoreboot.timer 2>/dev/null)" || true
+  active="$(systemctl is-active slowdns-autoreboot.timer 2>/dev/null)" || true
+  next="$(systemctl show slowdns-autoreboot.timer --property=NextElapseUSecRealtime --value 2>/dev/null)" || true
+  printf '  At boot: %s | Runtime: %s\n' "${enabled:-not configured}" "${active:-unknown}"
+  if [[ "$active" == active ]]; then
+    printf '  Next reboot: %s\n' "${next:-unavailable}"
+  else
+    printf '  Next reboot: none (timer is not active)\n'
+  fi
+}
+
+autoreboot_save() {
+  local schedule="$1" reboot_path="$2"
+  local dir="${AUTOREBOOT_UNIT_DIR:-/etc/systemd/system}" backup unit enabled active failed=0
+  enabled="$(systemctl is-enabled slowdns-autoreboot.timer 2>/dev/null)" || true
+  active="$(systemctl is-active slowdns-autoreboot.timer 2>/dev/null)" || true
+  # Refuse unit overrides that cannot be faithfully restored by this menu.
+  for unit in service timer; do
+    if [[ -L "$dir/slowdns-autoreboot.$unit" ]]; then
+      printf '  Cannot replace a linked or masked auto-reboot unit.\n'
+      return 1
+    fi
+  done
+  backup="$(mktemp -d "$dir/.slowdns-autoreboot.XXXXXX")" || return 1
+  for unit in service timer; do
+    if [[ -f "$dir/slowdns-autoreboot.$unit" ]]; then
+      if ! cp -p "$dir/slowdns-autoreboot.$unit" "$backup/$unit"; then
+        printf '  Backup failed; original schedule unchanged. Backup: %s\n' "$backup"
+        return 1
+      fi
+    fi
+  done
+  if ! printf '[Unit]\nDescription=SlowDNS scheduled VPS reboot\n[Service]\nType=oneshot\nExecStart=%s\n' "$reboot_path" >"$backup/new.service" ||
+     ! printf '[Unit]\nDescription=SlowDNS daily VPS reboot\n[Timer]\nOnCalendar=*-*-* %s\nAccuracySec=1s\nPersistent=false\nUnit=slowdns-autoreboot.service\n[Install]\nWantedBy=timers.target\n' "$schedule" >"$backup/new.timer"; then
+    printf '  Could not prepare schedule; original unchanged. Backup: %s\n' "$backup"
+    return 1
+  fi
+  if { [[ "$active" != active ]] || systemctl stop slowdns-autoreboot.timer; } &&
+     install -m 644 "$backup/new.service" "$dir/slowdns-autoreboot.service" &&
+     install -m 644 "$backup/new.timer" "$dir/slowdns-autoreboot.timer" &&
+     systemctl daemon-reload && systemctl enable slowdns-autoreboot.timer &&
+     systemctl restart slowdns-autoreboot.timer && systemctl is-active --quiet slowdns-autoreboot.timer; then
+    rm -r -- "$backup"
+    return 0
+  fi
+  # Restore files and both independent timer states after any failed step.
+  systemctl stop slowdns-autoreboot.timer || failed=1
+  systemctl disable slowdns-autoreboot.timer || failed=1
+  for unit in service timer; do
+    if [[ -f "$backup/$unit" ]]; then
+      cp -p "$backup/$unit" "$dir/slowdns-autoreboot.$unit" || failed=1
+    else
+      rm -f -- "$dir/slowdns-autoreboot.$unit" || failed=1
+    fi
+  done
+  systemctl daemon-reload || failed=1
+  case "$enabled" in
+    enabled) systemctl enable slowdns-autoreboot.timer || failed=1 ;;
+    enabled-runtime) systemctl enable --runtime slowdns-autoreboot.timer || failed=1 ;;
+  esac
+  if [[ "$active" == active ]]; then
+    systemctl start slowdns-autoreboot.timer || failed=1
+  fi
+  if (( failed )); then
+    printf '  Rollback incomplete; inspect systemd. Backup retained: %s\n' "$backup"
+  else
+    printf '  Previous schedule and timer state restored.\n'
+    rm -r -- "$backup"
+  fi
+  return 1
+}
+
+autoreboot_menu() {
+  local choice hour minute confirm schedule
+  while true; do
+    section "Auto-Reboot"
+    printf '  Server timezone: %s\n' "$(date +%Z)"
+    autoreboot_status
+    mi 1 "Enable / change schedule" "Daily full VPS reboot"
+    mi 2 "Disable auto-reboot"
+    mi 0 "Back"
+    choice="$(ask)"
+    case "$choice" in
+      0) return ;;
+      1)
+        if (( EUID != 0 )); then
+          printf '  Run the menu as root to change auto-reboot.\n'
+          continue
+        fi
+        hour="$(ask_prompt "Hour (00-23)" "04")"
+        minute="$(ask_prompt "Minute (00-59)" "00")"
+        if ! [[ "$hour" =~ ^([01]?[0-9]|2[0-3])$ && "$minute" =~ ^[0-5]?[0-9]$ ]]; then
+          printf '  Invalid hour or minute.\n'
+          continue
+        fi
+        printf -v schedule '%02d:%02d:00' "$((10#$hour))" "$((10#$minute))"
+        printf '  Reboot the entire VPS daily at %s, server local time. All users will disconnect.\n' "$schedule"
+        confirm="$(ask_prompt "Enable this schedule? (y/N)" "N")"
+        [[ "$confirm" =~ ^[Yy]$ ]] || continue
+        if ! command -v reboot >/dev/null 2>&1; then
+          printf '  reboot command is unavailable.\n'
+          continue
+        fi
+        if autoreboot_save "$schedule" "$(command -v reboot)"; then
+          printf '  Auto-reboot scheduled daily at %s.\n' "$schedule"
+        else
+          printf '  Failed to activate the auto-reboot schedule.\n'
+        fi
+        ;;
+      2)
+        if (( EUID != 0 )); then
+          printf '  Run the menu as root to change auto-reboot.\n'
+        elif systemctl disable --now slowdns-autoreboot.timer; then
+          printf '  Auto-reboot disabled.\n'
+        else
+          printf '  Could not disable timer; it may not have been configured.\n'
+        fi
+        ;;
+      *) printf '  Invalid choice.\n' ;;
+    esac
+  done
+}
+
 main_menu() {
   while true; do
     print_header
@@ -615,6 +740,7 @@ main_menu() {
     mi 10 "Restart services"  "Restart API and SlowDNS"
     mi 11 "View logs"         "Tail API and dnstt logs"
     mi 12 "SlowDNS MTU"       "Tune resolver compatibility"
+    mi 13 "Auto-reboot"       "Schedule daily VPS reboot"
     echo
     mi 0 "Exit"
 
@@ -631,6 +757,7 @@ main_menu() {
       10) print_header; restart_services; pause ;;
       11) print_header; view_logs; pause ;;
       12) print_header; change_mtu; pause ;;
+      13) autoreboot_menu ;;
       0)
         echo
         printf '  %sGoodbye.%s\n\n' "$C_MUTED" "$C_RESET"

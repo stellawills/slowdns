@@ -239,7 +239,7 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables screen gnupg
+    apt-get install -y python3 curl unzip tar openssh-server ca-certificates iptables iproute2 screen gnupg
   fi
 }
 
@@ -890,6 +890,7 @@ copy_project() {
   install -m 0755 "$PROJECT_DIR/scripts/run-api.sh" "$SCRIPTS_DIR/run-api.sh"
   install -m 0755 "$PROJECT_DIR/scripts/run-dnstt.sh" "$SCRIPTS_DIR/run-dnstt.sh"
   install -m 0755 "$PROJECT_DIR/scripts/control.sh" "$SCRIPTS_DIR/control.sh"
+  install -m 0755 "$PROJECT_DIR/scripts/healthcheck.sh" "$SCRIPTS_DIR/healthcheck.sh"
   install -m 0755 "$PROJECT_DIR/scripts/expire-sync.sh" "$SCRIPTS_DIR/expire-sync.sh"
   install -m 0755 "$PROJECT_DIR/scripts/menu.sh" "$SCRIPTS_DIR/menu.sh"
   install -m 0755 "$PROJECT_DIR/scripts/udp53-redirect.sh" "$SCRIPTS_DIR/udp53-redirect.sh"
@@ -1227,6 +1228,7 @@ Type=simple
 ExecStart=/opt/slowdns/scripts/run-dnstt.sh
 Restart=always
 RestartSec=2
+RuntimeMaxSec=1d
 LimitNOFILE=1048576
 StandardOutput=journal
 StandardError=journal
@@ -1273,6 +1275,33 @@ Unit=slowdns-expire-sync.service
 [Install]
 WantedBy=timers.target
 UNIT
+
+  cat >"$SYSTEMD_DIR/slowdns-healthcheck.service" <<UNIT
+[Unit]
+Description=SlowDNS runtime health check and recovery
+After=network-online.target slowdns-api.service slowdns-dnstt.service slowdns-udp53-redirect.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/slowdns/scripts/healthcheck.sh
+UNIT
+
+  cat >"$SYSTEMD_DIR/slowdns-healthcheck.timer" <<UNIT
+[Unit]
+Description=Run SlowDNS runtime health checks every two minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=30s
+RandomizedDelaySec=15s
+Persistent=true
+Unit=slowdns-healthcheck.service
+
+[Install]
+WantedBy=timers.target
+UNIT
 }
 
 cleanup_legacy_units() {
@@ -1282,6 +1311,8 @@ cleanup_legacy_units() {
     "slowdns-only-udp53-redirect.service"
     "slowdns-only-expire-sync.service"
     "slowdns-only-expire-sync.timer"
+    "slowdns-only-healthcheck.service"
+    "slowdns-only-healthcheck.timer"
   )
   local unit
   for unit in "${units[@]}"; do
@@ -1296,6 +1327,7 @@ start_services() {
   systemctl enable --now slowdns-api.service
   systemctl enable --now slowdns-dnstt.service
   systemctl enable --now slowdns-expire-sync.timer
+  systemctl enable --now slowdns-healthcheck.timer
 }
 
 ensure_service_active() {
